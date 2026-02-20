@@ -1,0 +1,45 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# uv lock (commit uv.lock for reproducibility, but ignore dist artefacts)
+# uv.lock  ← keep this — do NOT gitignore it
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Type checking
+.pyright/
+pyrightconfig.json.bak
+
+# IDEs
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Docker
+*.log
+
+# ngrok
+ngrok.exe
+ngrok

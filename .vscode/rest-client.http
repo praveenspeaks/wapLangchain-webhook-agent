@@ -1,0 +1,98 @@
+### WhatsApp AI Agent — REST Client requests
+### Requires VS Code extension: humao.rest-client
+
+@agentUrl   = http://localhost:8000
+@instance   = praveenIndia
+@testPhone  = 918700082665
+
+# =============================================================================
+# HEALTH & METRICS
+# =============================================================================
+
+### Health check
+GET {{agentUrl}}/health
+
+###
+
+### Metrics
+GET {{agentUrl}}/metrics
+
+# =============================================================================
+# WEBHOOK — simulate incoming WhatsApp messages
+# =============================================================================
+
+### Simulate "Hi" message
+POST {{agentUrl}}/webhook/evolution
+Content-Type: application/json
+
+{
+  "event": "messages.upsert",
+  "instance": "{{instance}}",
+  "data": [
+    {
+      "key": {
+        "remoteJid": "{{testPhone}}@s.whatsapp.net",
+        "fromMe": false,
+        "id": "TEST001"
+      },
+      "message": {
+        "conversation": "Hi! What products do you have?"
+      },
+      "messageType": "conversation",
+      "messageTimestamp": 1700000000,
+      "pushName": "Test User"
+    }
+  ]
+}
+
+###
+
+### Simulate order status query
+POST {{agentUrl}}/webhook/evolution
+Content-Type: application/json
+
+{
+  "event": "messages.upsert",
+  "instance": "{{instance}}",
+  "data": [
+    {
+      "key": {
+        "remoteJid": "{{testPhone}}@s.whatsapp.net",
+        "fromMe": false,
+        "id": "TEST002"
+      },
+      "message": {
+        "conversation": "Check order ORD-10001"
+      },
+      "messageType": "conversation",
+      "messageTimestamp": 1700000060,
+      "pushName": "Test User"
+    }
+  ]
+}
+
+###
+
+### Simulate product search
+POST {{agentUrl}}/webhook/evolution
+Content-Type: application/json
+
+{
+  "event": "messages.upsert",
+  "instance": "{{instance}}",
+  "data": [
+    {
+      "key": {
+        "remoteJid": "{{testPhone}}@s.whatsapp.net",
+        "fromMe": false,
+        "id": "TEST003"
+      },
+      "message": {
+        "conversation": "Show me electronics products"
+      },
+      "messageType": "conversation",
+      "messageTimestamp": 1700000120,
+      "pushName": "Test User"
+    }
+  ]
+}

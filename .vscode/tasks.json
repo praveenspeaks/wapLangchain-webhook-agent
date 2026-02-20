@@ -1,0 +1,166 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ── Project setup ────────────────────────────────────────────────────
+    {
+      "label": "uv: Install Dependencies",
+      "type": "shell",
+      "command": "uv sync",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ── Development server ───────────────────────────────────────────────
+    {
+      "label": "Run: FastAPI (hot-reload)",
+      "type": "shell",
+      "command": "uvicorn server:app --host 0.0.0.0 --port 8000 --reload --log-config /dev/null",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^ERROR.*$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Started.*$",
+          "endsPattern": "^.*Application startup complete.*$"
+        }
+      }
+    },
+
+    // ── Docker ───────────────────────────────────────────────────────────
+    {
+      "label": "Docker: Start all services",
+      "type": "shell",
+      "command": "docker-compose up -d",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Start with ngrok",
+      "type": "shell",
+      "command": "docker-compose --profile dev up -d",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Stop all services",
+      "type": "shell",
+      "command": "docker-compose down",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: View agent logs",
+      "type": "shell",
+      "command": "docker-compose logs -f agent",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Rebuild agent image",
+      "type": "shell",
+      "command": "docker-compose build --no-cache agent",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ── Code quality ─────────────────────────────────────────────────────
+    {
+      "label": "Lint: Ruff check",
+      "type": "shell",
+      "command": "ruff check .",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Format: Ruff format",
+      "type": "shell",
+      "command": "ruff format .",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Type Check: Pyright",
+      "type": "shell",
+      "command": "pyright .",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": ["$tsc"]
+    },
+
+    // ── Tests ────────────────────────────────────────────────────────────
+    {
+      "label": "Test: Run pytest",
+      "type": "shell",
+      "command": "pytest tests/ -v",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ── ngrok ─────────────────────────────────────────────────────────────
+    {
+      "label": "ngrok: Tunnel port 8000",
+      "type": "shell",
+      "command": "ngrok http 8000",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

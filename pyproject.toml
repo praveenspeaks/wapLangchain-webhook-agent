@@ -1,0 +1,86 @@
+[project]
+name = "whatsapp-agent"
+version = "0.1.0"
+description = "Production-ready WhatsApp AI agent using LangGraph and Shivay API"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    # LangGraph & LangChain core  (LangChain 1.x + LangGraph 0.3.x)
+    "langgraph>=0.3.0",
+    "langchain>=1.0.0",
+    "langchain-groq>=0.3.0",
+    "langchain-core>=0.3.50",
+    "langgraph-prebuilt>=0.1.0",   # ToolNode, create_react_agent helpers
+
+    # FastAPI web framework
+    "fastapi>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
+
+    # Database - PostgreSQL checkpointer (psycopg3 / psycopg pool)
+    "langgraph-checkpoint-postgres>=2.0.11",
+    "psycopg[binary]>=3.2.4",
+    "psycopg-pool>=3.2.3",          # AsyncConnectionPool for lifelong connection pool
+
+    # HTTP client for Shivay API
+    "httpx>=0.28.1",
+
+    # Validation
+    "pydantic>=2.10.4",
+    "pydantic-settings>=2.7.0",
+
+    # Utilities
+    "tenacity>=9.0.0",        # retry logic
+    "python-json-logger>=3.2.1",  # structured logging
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.25.2",
+    "pytest-httpx>=0.35.0",
+    "ruff>=0.9.4",
+    "pyright>=1.1.400",
+    "ipython>=8.31.0",
+    "httpx>=0.28.1",          # for test client
+    "anyio>=4.8.0",           # async test backend
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+# ---------------------------------------------------------------------------
+# Ruff – linter + formatter (replaces flake8, isort, black)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
+ignore = ["ANN401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Pyright – static type checker
+# ---------------------------------------------------------------------------
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

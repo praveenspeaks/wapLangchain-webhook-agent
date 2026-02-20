@@ -1,0 +1,73 @@
+{
+  // ── Python ──────────────────────────────────────────────────────────────
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python",
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.diagnosticMode": "workspace",
+
+  // ── Ruff (linter + formatter) ────────────────────────────────────────────
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll.ruff": "explicit"
+    }
+  },
+
+  // ── Editor general ───────────────────────────────────────────────────────
+  "editor.rulers": [100],
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.trimAutoWhitespace": true,
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // ── Auto-save (saves 1 s after typing stops) ─────────────────────────────
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+
+  // ── File associations ────────────────────────────────────────────────────
+  "files.associations": {
+    "*.env*": "dotenv",
+    "docker-compose*.yml": "dockercompose"
+  },
+
+  // ── Exclude noisy folders from explorer ─────────────────────────────────
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/*.egg-info": true
+  },
+
+  // ── Docker extension ─────────────────────────────────────────────────────
+  "docker.defaultRegistryPath": "docker.io",
+  "docker.showStartPage": false,
+
+  // ── REST Client extension defaults ──────────────────────────────────────
+  "rest-client.environmentVariables": {
+    "$shared": {
+      "agentUrl": "http://localhost:8000",
+      "evolutionUrl": "http://localhost:8080",
+      "apiKey": "your-evolution-api-key",
+      "instance": "my_whatsapp_bot"
+    }
+  },
+
+  // ── Terminal (use .venv by default) ──────────────────────────────────────
+  "terminal.integrated.env.windows": {
+    "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+    "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}"
+  },
+  "terminal.integrated.env.linux": {
+    "VIRTUAL_ENV": "${workspaceFolder}/.venv",
+    "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
+  },
+
+  // ── YAML ────────────────────────────────────────────────────────────────
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": [
+      "docker-compose*.yml"
+    ]
+  }
+}

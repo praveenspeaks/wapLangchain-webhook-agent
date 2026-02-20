@@ -1,0 +1,77 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // ── FastAPI server (with debugger) ───────────────────────────────────
+    {
+      "name": "Debug: FastAPI Server",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "server:app",
+        "--host", "0.0.0.0",
+        "--port", "8000",
+        "--reload",
+        "--log-config", "/dev/null"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "console": "integratedTerminal",
+      "jinja": true,
+      "justMyCode": false
+    },
+
+    // ── Run agent.py standalone (for quick REPL-style testing) ───────────
+    {
+      "name": "Debug: Agent (standalone)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/agent.py",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+
+    // ── pytest ───────────────────────────────────────────────────────────
+    {
+      "name": "Debug: Pytest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests/",
+        "-v",
+        "--no-header"
+      ],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+
+    // ── Attach to running Docker container ───────────────────────────────
+    {
+      "name": "Debug: Attach to Docker (agent)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678         // match debugpy port exposed in Dockerfile.dev
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/app"
+        }
+      ],
+      "justMyCode": false
+    }
+  ]
+}
