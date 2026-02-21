@@ -1,0 +1,65 @@
+{
+  "name": "WhatsApp AI Agent",
+  "description": "Production-ready WhatsApp chatbot using LangGraph, LangChain, Evolution API, FastAPI, PostgreSQL, and Redis.",
+  "version": "1.0.0",
+  "entrypoint": "server.py",
+  "language": "python",
+  "framework": "langgraph",
+  "llm": "groq/llama-3.3-70b-versatile",
+  "tools": [
+    "get_order_status",
+    "search_product",
+    "create_support_ticket",
+    "get_business_hours"
+  ],
+  "webhook": {
+    "path": "/webhook/evolution",
+    "method": "POST"
+  },
+  "admin": {
+    "history": "/admin/history/{phone}",
+    "instance_status": "/admin/instance/status",
+    "instance_create": "/admin/instance/create",
+    "instance_qrcode": "/admin/instance/qrcode",
+    "webhook_set": "/admin/webhook/set",
+    "send": "/admin/send"
+  },
+  "health": "/health",
+  "metrics": "/metrics",
+  "dependencies": [
+    "langgraph",
+    "langchain",
+    "langchain-groq",
+    "fastapi",
+    "uvicorn",
+    "psycopg",
+    "psycopg-pool",
+    "redis",
+    "httpx",
+    "pydantic",
+    "prometheus-fastapi-instrumentator",
+    "tenacity",
+    "python-json-logger",
+    "python-dotenv"
+  ],
+  "docker": {
+    "compose": "docker-compose.yml",
+    "dockerfile": "Dockerfile"
+  },
+  "env": [
+    "GROQ_API_KEY",
+    "EVOLUTION_API_URL",
+    "EVOLUTION_API_KEY",
+    "EVOLUTION_INSTANCE_NAME",
+    "EVOLUTION_INSTANCE_TOKEN",
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "REDIS_URL",
+    "WEBHOOK_SECRET",
+    "WEBHOOK_URL",
+    "RATE_LIMIT_MAX",
+    "RATE_LIMIT_WINDOW",
+    "LOG_LEVEL",
+    "ENVIRONMENT"
+  ]
+}
