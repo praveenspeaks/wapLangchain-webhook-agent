@@ -47,10 +47,7 @@
   // ── REST Client extension defaults ──────────────────────────────────────
   "rest-client.environmentVariables": {
     "$shared": {
-      "agentUrl": "http://localhost:8000",
-      "evolutionUrl": "http://localhost:8080",
-      "apiKey": "your-evolution-api-key",
-      "instance": "my_whatsapp_bot"
+      "agentUrl": "http://localhost:8000"
     }
   },
 

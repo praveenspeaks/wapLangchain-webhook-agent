@@ -1,6 +1,6 @@
 -- schema.sql
 -- WhatsApp AI Agent — Database schema + sample data
--- Run: psql "postgres://rohit:rohit!23@72.60.23.150:5433/testing?sslmode=disable" -f schema.sql
+-- Run: psql "$POSTGRES_URL" -f schema.sql
 
 BEGIN;
 

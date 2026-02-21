@@ -1,5 +1,5 @@
 # =============================================================================
-# docker-compose.yml — WhatsApp AI Agent (lightweight)
+# docker-compose.yml — AI Agent Webhook
 #
 # Services: agent + ngrok (dev tunnel)
 # All data lives on your external PostgreSQL.
@@ -14,7 +14,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: whatsapp_agent
+    container_name: webhook_agent
     restart: unless-stopped
     env_file:
       - .env
@@ -30,7 +30,7 @@ services:
   # ── ngrok (LOCAL DEV ONLY) ────────────────────────────────────────────────
   ngrok:
     image: ngrok/ngrok:latest
-    container_name: whatsapp_ngrok
+    container_name: agent_ngrok
     restart: unless-stopped
     profiles:
       - dev

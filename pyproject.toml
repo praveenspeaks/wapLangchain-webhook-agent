@@ -1,7 +1,7 @@
 [project]
-name = "whatsapp-agent"
+name = "webhook-agent"
 version = "0.1.0"
-description = "Production-ready WhatsApp AI agent using LangGraph and Shivay API"
+description = "AI agent webhook using LangGraph, Groq, and PostgreSQL"
 readme = "README.md"
 requires-python = ">=3.12"
 
@@ -22,15 +22,11 @@ dependencies = [
     "psycopg[binary]>=3.2.4",
     "psycopg-pool>=3.2.3",          # AsyncConnectionPool for lifelong connection pool
 
-    # HTTP client for Shivay API
-    "httpx>=0.28.1",
-
     # Validation
     "pydantic>=2.10.4",
     "pydantic-settings>=2.7.0",
 
     # Utilities
-    "tenacity>=9.0.0",        # retry logic
     "python-json-logger>=3.2.1",  # structured logging
     "python-dotenv>=1.0.1",
 ]
@@ -39,7 +35,7 @@ dependencies = [
 dev = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.2",
-    "pytest-httpx>=0.35.0",
+    "httpx>=0.28.1",          # for TestClient
     "ruff>=0.9.4",
     "pyright>=1.1.400",
     "ipython>=8.31.0",

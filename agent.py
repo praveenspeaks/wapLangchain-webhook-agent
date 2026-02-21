@@ -10,7 +10,7 @@ Graph topology
               ◄────────────────────────────────────────┘
 
 State: MessagesState  (list of BaseMessages)
-Checkpointer: AsyncPostgresSaver  →  per-user thread = phone number
+Checkpointer: AsyncPostgresSaver  →  per-user thread = sender_id
 """
 
 from __future__ import annotations
@@ -32,12 +32,12 @@ from tools import TOOLS
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# System prompt — optimised for WhatsApp (brief, emoji-friendly)
+# System prompt
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are a friendly and efficient WhatsApp customer support assistant.
+SYSTEM_PROMPT = """You are a friendly and efficient customer support assistant.
 
 Your personality:
-- Concise: WhatsApp messages should be short. Aim for 3 sentences or fewer per reply.
+- Concise: Aim for 3 sentences or fewer per reply.
 - Helpful: always try to resolve the customer's issue in one turn.
 - Warm: use a casual, approachable tone. A single relevant emoji is fine.
 - Honest: if you don't know something, say so and offer to open a ticket.
@@ -78,7 +78,7 @@ def _build_llm() -> Any:
         model="llama-3.1-8b-instant",
         api_key=settings.groq_api_key, # type: ignore
         temperature=0.2,
-        max_tokens=512,  # keep responses concise for WhatsApp
+        max_tokens=512,
     )
     return llm.bind_tools(TOOLS)
 
@@ -164,46 +164,39 @@ async def process_message(
     graph: Any,
     phone: str,
     text: str,
-    push_name: str | None = None,
 ) -> str:
     """
-    Run the agent for a single incoming WhatsApp message.
+    Run the agent for a single incoming message.
 
     Args:
-        graph:     Compiled LangGraph graph (with checkpointer).
-        phone:     Sender's phone number — used as the thread_id.
-        text:      Message text to process.
-        push_name: WhatsApp display name of the sender (optional).
+        graph: Compiled LangGraph graph (with checkpointer).
+        phone: Sender ID — used as the thread_id for conversation memory.
+        text:  Message text to process.
 
     Returns:
         The agent's final text response.
     """
     from langchain_core.messages import HumanMessage
 
-    # Enrich the user message with sender context when we have it
-    user_content = text
-    if push_name:
-        user_content = f"[User: {push_name}] {text}"
-
     config: RunnableConfig = {
         "configurable": {
-            "thread_id": phone,  # one persistent thread per user
+            "thread_id": phone,
         },
-        "recursion_limit": 10,  # prevent infinite agent loops
+        "recursion_limit": 10,
     }
 
     logger.info(
         "Processing message",
-        extra={"phone": phone, "push_name": push_name, "text_length": len(text)},
+        extra={"sender_id": phone, "text_length": len(text)},
     )
 
     try:
         result = await graph.ainvoke(
-            {"messages": [HumanMessage(content=user_content)]},
+            {"messages": [HumanMessage(content=text)]},
             config=config,
         )
     except Exception as exc:
-        logger.exception("Agent graph error", extra={"phone": phone, "error": str(exc)})
+        logger.exception("Agent graph error", extra={"sender_id": phone, "error": str(exc)})
         return "Sorry, I encountered an error. Please try again or type *help*. 🙏"
 
     # Extract the last AI message content
@@ -220,43 +213,3 @@ async def process_message(
             return str(content)
 
     return "I was unable to generate a response. Please try again. 🙏"
-
-
-# ---------------------------------------------------------------------------
-# Retrieve conversation history for admin endpoint
-# ---------------------------------------------------------------------------
-
-
-async def get_conversation_history(
-    *,
-    graph: Any,
-    phone: str,
-    limit: int = 20,
-) -> list[dict[str, str]]:
-    """
-    Retrieve recent conversation messages for a given phone number.
-
-    Returns a list of dicts with ``role`` and ``content`` keys.
-    """
-    from langchain_core.messages import AIMessage, HumanMessage
-
-    config: RunnableConfig = {"configurable": {"thread_id": phone}}
-
-    try:
-        state = await graph.aget_state(config)
-        messages: list[BaseMessage] = state.values.get("messages", [])
-    except Exception as exc:
-        logger.warning(
-            "Could not fetch conversation state",
-            extra={"phone": phone, "error": str(exc)},
-        )
-        return []
-
-    history: list[dict[str, str]] = []
-    for msg in messages[-limit:]:
-        if isinstance(msg, HumanMessage):
-            history.append({"role": "human", "content": str(msg.content)})
-        elif isinstance(msg, AIMessage):
-            history.append({"role": "ai", "content": str(msg.content)})
-
-    return history

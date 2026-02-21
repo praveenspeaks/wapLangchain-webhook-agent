@@ -289,11 +289,8 @@ All settings are read from environment variables (or `.env`).
 | `SHIVAY_API_URL` | Yes | — | Shivay API base URL |
 | `SHIVAY_API_KEY` | Yes | — | Shivay API key |
 | `SHIVAY_INSTANCE_NAME` | Yes | — | WhatsApp instance name |
-| `SHIVAY_INSTANCE_TOKEN` | Yes | — | Instance token |
-| `DATABASE_URL` | Yes | — | asyncpg PostgreSQL URL |
 | `POSTGRES_URL` | Yes | — | psycopg PostgreSQL URL (checkpointer) |
 | `TESTING_DB_URL` | No | `POSTGRES_URL` | psycopg URL for business data DB |
-| `WEBHOOK_SECRET` | Yes | — | Webhook shared secret |
 | `RATE_LIMIT_MAX` | No | `10` | Max messages per window |
 | `RATE_LIMIT_WINDOW` | No | `60` | Window size in seconds |
 | `LOG_LEVEL` | No | `INFO` | Python log level |

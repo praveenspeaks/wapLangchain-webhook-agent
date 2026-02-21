@@ -1,9 +1,7 @@
-### WhatsApp AI Agent — REST Client requests
+### AI Agent — REST Client requests
 ### Requires VS Code extension: humao.rest-client
 
-@agentUrl   = http://localhost:8000
-@instance   = praveenIndia
-@testPhone  = 918700082665
+@agentUrl = http://localhost:8000
 
 # =============================================================================
 # HEALTH & METRICS
@@ -18,81 +16,47 @@ GET {{agentUrl}}/health
 GET {{agentUrl}}/metrics
 
 # =============================================================================
-# WEBHOOK — simulate incoming WhatsApp messages
+# AGENT — send messages and get replies
 # =============================================================================
 
-### Simulate "Hi" message
-POST {{agentUrl}}/webhook/evolution
+### Ask about products
+POST {{agentUrl}}/api/agent
 Content-Type: application/json
 
 {
-  "event": "messages.upsert",
-  "instance": "{{instance}}",
-  "data": [
-    {
-      "key": {
-        "remoteJid": "{{testPhone}}@s.whatsapp.net",
-        "fromMe": false,
-        "id": "TEST001"
-      },
-      "message": {
-        "conversation": "Hi! What products do you have?"
-      },
-      "messageType": "conversation",
-      "messageTimestamp": 1700000000,
-      "pushName": "Test User"
-    }
-  ]
+  "sender_id": "user-001",
+  "message": "Hi! What products do you have?"
 }
 
 ###
 
-### Simulate order status query
-POST {{agentUrl}}/webhook/evolution
+### Check order status
+POST {{agentUrl}}/api/agent
 Content-Type: application/json
 
 {
-  "event": "messages.upsert",
-  "instance": "{{instance}}",
-  "data": [
-    {
-      "key": {
-        "remoteJid": "{{testPhone}}@s.whatsapp.net",
-        "fromMe": false,
-        "id": "TEST002"
-      },
-      "message": {
-        "conversation": "Check order ORD-10001"
-      },
-      "messageType": "conversation",
-      "messageTimestamp": 1700000060,
-      "pushName": "Test User"
-    }
-  ]
+  "sender_id": "user-001",
+  "message": "Check order ORD-10001"
 }
 
 ###
 
-### Simulate product search
-POST {{agentUrl}}/webhook/evolution
+### Search electronics
+POST {{agentUrl}}/api/agent
 Content-Type: application/json
 
 {
-  "event": "messages.upsert",
-  "instance": "{{instance}}",
-  "data": [
-    {
-      "key": {
-        "remoteJid": "{{testPhone}}@s.whatsapp.net",
-        "fromMe": false,
-        "id": "TEST003"
-      },
-      "message": {
-        "conversation": "Show me electronics products"
-      },
-      "messageType": "conversation",
-      "messageTimestamp": 1700000120,
-      "pushName": "Test User"
-    }
-  ]
+  "sender_id": "user-002",
+  "message": "Show me electronics products"
+}
+
+###
+
+### Ask about events
+POST {{agentUrl}}/api/agent
+Content-Type: application/json
+
+{
+  "sender_id": "user-003",
+  "message": "What events are coming up?"
 }
