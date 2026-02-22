@@ -1,7 +1,7 @@
 """
 tests/test_webhook.py
 ---------------------
-Integration tests for the /api/agent endpoint.
+Integration tests for the /invoke endpoint.
 """
 
 import os
@@ -16,45 +16,44 @@ os.environ.setdefault("TESTING_DB_URL", "postgresql://agent:secret@localhost:543
 
 class TestAgentEndpoint:
     def test_agent_returns_reply(self) -> None:
-        with patch("server.process_message", new=AsyncMock(return_value="Hello!")):
-            from server import app
+        with patch("main.process_message", new=AsyncMock(return_value="Hello!")):
+            from main import app
 
             client = TestClient(app, raise_server_exceptions=False)
             resp = client.post(
-                "/api/agent",
-                json={"sender_id": "user123", "message": "Hi"},
+                "/invoke",
+                json={"sessionId": "user123", "message": "Hi"},
             )
             assert resp.status_code == 200
             data = resp.json()
-            assert data["reply"] == "Hello!"
-            assert data["status"] == "success"
+            assert data["response"] == "Hello!"
 
     def test_agent_returns_error_on_failure(self) -> None:
-        with patch("server.process_message", new=AsyncMock(side_effect=RuntimeError("boom"))):
-            from server import app
+        with patch("main.process_message", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            from main import app
 
             client = TestClient(app, raise_server_exceptions=False)
             resp = client.post(
-                "/api/agent",
-                json={"sender_id": "user123", "message": "Hi"},
+                "/invoke",
+                json={"sessionId": "user123", "message": "Hi"},
             )
             assert resp.status_code == 200
             data = resp.json()
-            assert data["status"] == "error"
+            assert "internal error" in data["response"]
 
     def test_agent_rejects_missing_fields(self) -> None:
-        from server import app
+        from main import app
 
         client = TestClient(app, raise_server_exceptions=False)
-        resp = client.post("/api/agent", json={"message": "Hi"})
-        assert resp.status_code == 422  # missing sender_id
+        resp = client.post("/invoke", json={"message": "Hi"})
+        assert resp.status_code == 422  # missing sessionId
 
 
 class TestHealthEndpoint:
     def test_health_returns_ok(self) -> None:
-        from server import app
+        from main import app
 
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
+        assert resp.json()["status"] == "healthy"

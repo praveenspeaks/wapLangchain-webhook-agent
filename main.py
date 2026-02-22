@@ -4,7 +4,7 @@ server.py
 FastAPI application — receives messages via webhook, processes them with
 LangGraph + Groq, queries PostgreSQL, and returns the reply in the response.
 
-Run locally:  uv run uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+Run locally:  uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from db import close_pool as close_tool_pool
 from db import init_pool as init_tool_pool
 from models import (
     HealthResponse,
-    GenericAgentRequest,
-    GenericAgentResponse,
+    InvokeRequest,
+    InvokeResponse,
     settings,
 )
 
@@ -123,29 +123,28 @@ app = FastAPI(
 # =============================================================================
 
 
-@app.post("/api/agent", response_model=GenericAgentResponse)
-async def agent_webhook(request: GenericAgentRequest) -> GenericAgentResponse:
+@app.post("/invoke", response_model=InvokeResponse)
+async def agent_webhook(request: InvokeRequest) -> InvokeResponse:
     """
     Receives a message and returns the agent's reply in the HTTP response.
     """
-    logger.info("Request received", extra={"sender_id": request.sender_id})
+    logger.info("Request received", extra={"sender_id": request.sessionId})
 
     try:
         response_text = await process_message(
             graph=app_state.graph,
-            phone=request.sender_id,
+            phone=request.sessionId,
             text=request.message,
         )
 
         app_state.messages_processed += 1
-        return GenericAgentResponse(reply=response_text)
+        return InvokeResponse(response=response_text)
 
     except Exception:
         app_state.messages_failed += 1
-        logger.exception("Error processing request", extra={"sender_id": request.sender_id})
-        return GenericAgentResponse(
-            reply="I'm sorry, I encountered an internal error. Please try again.",
-            status="error",
+        logger.exception("Error processing request", extra={"sender_id": request.sessionId})
+        return InvokeResponse(
+            response="I'm sorry, I encountered an internal error. Please try again."
         )
 
 
@@ -156,7 +155,7 @@ async def agent_webhook(request: GenericAgentRequest) -> GenericAgentResponse:
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok", environment=settings.environment)
+    return HealthResponse(status="healthy")
 
 
 @app.get("/metrics")
@@ -175,4 +174,4 @@ async def metrics() -> dict[str, Any]:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True, log_config=None)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_config=None)

@@ -2,7 +2,12 @@
   "name": "AI Agent Webhook",
   "description": "LangGraph agent with Groq LLM, invoked via webhook, replies in HTTP response.",
   "version": "1.0.0",
-  "entrypoint": "server.py",
+  "entryPoint": "main.py",
+  "port": 8000,
+  "healthCheck": {
+    "path": "/health",
+    "port": 8000
+  },
   "language": "python",
   "framework": "langgraph",
   "llm": "groq/llama-3.1-8b-instant",
@@ -17,7 +22,7 @@
   ],
   "endpoints": {
     "agent": {
-      "path": "/api/agent",
+      "path": "/invoke",
       "method": "POST"
     },
     "health": "/health",

@@ -63,18 +63,14 @@ settings = Settings()  # type: ignore[call-arg]
 
 class HealthResponse(BaseModel):
     status: str
-    environment: str
-    version: str = "1.0.0"
 
 
-class GenericAgentRequest(BaseModel):
+class InvokeRequest(BaseModel):
     """Request payload for the agent webhook."""
-    sender_id: str = Field(..., description="Unique ID for the user/session (used for conversation memory)")
+    sessionId: str = Field(..., description="Unique ID for the user/session (used for conversation memory)")
     message: str = Field(..., description="The user's input text")
-    metadata: dict[str, Any] | None = Field(default=None, description="Optional extra data")
 
 
-class GenericAgentResponse(BaseModel):
+class InvokeResponse(BaseModel):
     """Response returned by the agent webhook."""
-    reply: str
-    status: str = "success"
+    response: str

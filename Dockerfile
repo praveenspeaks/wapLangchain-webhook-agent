@@ -33,7 +33,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 
 # Copy application source
-COPY agent.py db.py models.py server.py tools.py ./
+COPY agent.py db.py models.py main.py tools.py ./
 
 # Make sure the venv's bin is in PATH
 ENV PATH="/app/.venv/bin:$PATH" \
@@ -51,7 +51,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/health',timeout=5); sys.exit(0)" || exit 1
 
 # Start the FastAPI app via uvicorn
-CMD ["uvicorn", "server:app", \
+CMD ["uvicorn", "main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--workers", "1", \
