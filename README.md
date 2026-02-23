@@ -29,7 +29,7 @@ WhatsApp ──► Shivay API ──► FastAPI Webhook ──► LangGraph Agen
 
 ```
 .
-├── server.py              # FastAPI app, webhook endpoint, lifespan
+├── main.py              # FastAPI app, webhook endpoint, lifespan
 ├── agent.py               # LangGraph graph definition + process_message()
 ├── tools.py               # 7 LangChain tools backed by PostgreSQL
 ├── db.py                  # Async connection pool for tool queries
@@ -65,7 +65,7 @@ WhatsApp User
 Shivay API
      │  POST /webhook/shivay  (event: messages.upsert)
      ▼
-┌─ server.py ─────────────────────────────────────────────────┐
+┌─ main.py ─────────────────────────────────────────────────┐
 │                                                              │
 │  webhook_shivay()             ← FastAPI route handler        │
 │    ├─ Normalize event name    (messages.upsert → MESSAGES_UPSERT)
@@ -148,8 +148,8 @@ Shivay API
 ### Function call chain (compact)
 
 ```
-server.webhook_shivay()
-  → server._handle_message()           (BackgroundTask)
+main.webhook_shivay()
+  → main._handle_message()           (BackgroundTask)
     → shivay_client.send_typing()       (best-effort)
     → agent.process_message()
       → graph.ainvoke()
@@ -164,7 +164,7 @@ server.webhook_shivay()
 
 ## Startup / Lifespan
 
-When the server starts (`server.py:lifespan()`):
+When the main starts (`main.py:lifespan()`):
 
 1. **PostgreSQL pool** — `AsyncConnectionPool` for LangGraph checkpointer (`POSTGRES_URL`)
 2. **Checkpointer** — `AsyncPostgresSaver.setup()` creates checkpoint tables
@@ -262,7 +262,7 @@ docker compose logs -f agent
 ```bash
 uv sync                    # Install dependencies
 cp .env.example .env       # Configure
-uv run python server.py    # Start with hot reload on :8000
+uv run python main.py    # Start with hot reload on :8000
 ```
 
 Or use VS Code task: **Run: FastAPI (hot-reload)**

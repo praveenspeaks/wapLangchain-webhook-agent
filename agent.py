@@ -155,7 +155,7 @@ def build_graph(checkpointer: BaseCheckpointSaver) -> Any:  # type: ignore[type-
 
 
 # ---------------------------------------------------------------------------
-# High-level helper used by the webhook server
+# High-level helper used by the webhook main
 # ---------------------------------------------------------------------------
 
 

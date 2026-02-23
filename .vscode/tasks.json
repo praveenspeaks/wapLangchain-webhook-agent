@@ -14,11 +14,11 @@
       "problemMatcher": []
     },
 
-    // ── Development server ───────────────────────────────────────────────
+    // ── Development main ───────────────────────────────────────────────
     {
       "label": "Run: FastAPI (hot-reload)",
       "type": "shell",
-      "command": "uvicorn server:app --host 0.0.0.0 --port 8000 --reload --log-config /dev/null",
+      "command": "uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-config /dev/null",
       "group": {
         "kind": "build",
         "isDefault": true

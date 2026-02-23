@@ -1,5 +1,5 @@
 """
-server.py
+main.py
 ---------
 FastAPI application — receives messages via webhook, processes them with
 LangGraph + Groq, queries PostgreSQL, and returns the reply in the response.
@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_tool_pool()
     logger.info("Tool DB ready")
 
-    logger.info("Server ready")
+    logger.info("main ready")
     yield
 
     logger.info("Shutting down...")
