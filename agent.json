@@ -47,7 +47,6 @@
   "env": [
     "GROQ_API_KEY",
     "POSTGRES_URL",
-    "TESTING_DB_URL",
     "LOG_LEVEL",
     "ENVIRONMENT"
   ]
