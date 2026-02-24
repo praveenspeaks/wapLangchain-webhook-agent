@@ -128,7 +128,7 @@ async def agent_webhook(request: InvokeRequest) -> InvokeResponse:
     """
     Receives a message and returns the agent's reply in the HTTP response.
     """
-    logger.info("Request received", extra={"sender_id": request.sessionId})
+    logger.info(f"Request received {request}", extra={"sender_id": request.sessionId})
 
     try:
         response_text = await process_message(
