@@ -43,6 +43,7 @@ httpx==0.28.1
     #   langchain-core
     #   langgraph-sdk
     #   langsmith
+    #   webhook-agent
 idna==3.11
     # via
     #   anyio
@@ -164,8 +165,10 @@ typing-inspection==0.4.2
     #   fastapi
     #   pydantic
     #   pydantic-settings
-tzdata==2025.3 ; sys_platform == 'win32'
-    # via psycopg
+tzdata==2025.3
+    # via
+    #   psycopg
+    #   webhook-agent
 urllib3==2.6.3
     # via requests
 uuid-utils==0.14.0

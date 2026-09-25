@@ -5,7 +5,8 @@ It looks up orders, searches products, checks event ticket availability, creates
 support tickets, and reports business hours. Conversations are saved by session ID.
 
 Replies return directly over HTTP. A website, mobile app, or messaging gateway can
-call this API. WhatsApp/Shivay integration is not included.
+call this API. Scheduled birthday and anniversary greetings can be sent through
+Shivay. Incoming WhatsApp webhook handling is not included.
 
 ## Start reading here
 
@@ -41,6 +42,8 @@ app/
         events.py           # Event availability
         support.py          # Support ticket creation
         business.py         # Business hours (no database)
+    greetings/              # Occasion management, daily scheduler, Shivay sender
+migrations/                 # Additive database migrations (safe for existing tables)
 tests/                      # Offline tests with mocked external services
 schema.sql                  # Demo schema and sample data
 Dockerfile                  # Container image
@@ -177,6 +180,101 @@ uv run ruff format --check .
 Tests mock database and model calls. They cover tool behavior, HTTP responses,
 conversation memory, tool routing, and resource cleanup without external access.
 They do not prove live Groq, PostgreSQL, or Docker connectivity.
+
+## Daily birthday and anniversary greetings
+
+The scheduler runs inside the API process and sends personalized text via Shivay.
+It does not depend on Groq for greetings. Keep at least one application instance
+running; a hosting plan that sleeps cannot run the morning job while asleep.
+
+1. Apply the additive migration to the business database once. Unlike schema.sql,
+   it does not drop existing tables. Re-running it is safe for the same schema.
+
+```sh
+uv run python -m app.greetings.migrate
+# Or, after building the image:
+docker compose run --rm agent python -m app.greetings.migrate
+```
+
+2. Configure these values in the deployment environment (or .env locally):
+
+```env
+GREETINGS_ENABLED=true
+GREETINGS_TIME=09:00
+GREETINGS_ADMIN_API_KEY=your-long-random-administration-key
+SHIVAY_API_URL=https://your-shivay-server
+SHIVAY_API_KEY=your-shivay-api-key
+SHIVAY_INSTANCE_NAME=your-connected-instance
+```
+
+GREETINGS_TIME is evaluated separately in each recipient's required timezone.
+For example, Asia/Kolkata recipients receive greetings at 09:00 India time, while
+America/New_York recipients receive them at 09:00 New York time, including DST.
+Country is metadata; it is never used to guess a timezone. GREETINGS_TIMEZONE is
+no longer used. Existing records without a timezone are skipped until updated. The sender uses the original project's
+Shivay contract: POST /message/sendText/{instance}, apikey header, and a JSON body
+containing number (international digits without +) and text. It expects key.id in
+Shivay's success response. The instance must already be paired to WhatsApp.
+TLS certificate verification is enabled. Restart/recreate the app after changing
+configuration. The scheduler is disabled by default.
+
+3. Add people through POST /greetings/occasions in /docs, or directly in PostgreSQL.
+   Use the Authorize button in /docs with your GREETINGS_ADMIN_API_KEY. All
+   /greetings endpoints require the X-Greetings-Key header and are disabled when
+   no administration key is configured. Never put that key in a public frontend.
+
+```json
+{
+  "name": "Alex",
+  "occasion": "birthday",
+  "month": 9,
+  "day": 25,
+  "year": null,
+  "country": "GB",
+  "timezone": "Europe/London",
+  "phone_number": "+447700900123",
+  "enabled": true
+}
+```
+
+The year can be omitted, null, or the real year (for example, 1990). Each occasion
+recurs by month/day. A person can have separate birthday and anniversary records.
+Names personalize the greeting; ages and anniversary counts are not included.
+Country uses a two-letter uppercase code. Phone numbers must include + and the
+country calling code. The example phone number is illustrative; add your own
+recipients. Only enable records for people you intend to receive these greetings.
+
+```sql
+INSERT INTO greeting_occasions
+    (name, occasion, month, day, year, country, phone_number, timezone)
+VALUES
+    ('Alex', 'birthday', 9, 25, NULL, 'GB', '+447700900123', 'Europe/London');
+```
+
+| Endpoint | Purpose |
+| --- | --- |
+| POST /greetings/occasions | Add a person and occasion |
+| GET /greetings/occasions | List records; supports limit and offset |
+| PATCH /greetings/occasions/{id}/enabled | Pause/resume with {"enabled": false/true} |
+| PATCH /greetings/occasions/{id}/timezone | Set an IANA timezone, e.g. {"timezone": "Asia/Kolkata"} |
+| GET /greetings/deliveries | Inspect send history; supports limit and offset |
+
+To change names, dates, or phone numbers, edit the record in PostgreSQL. Disable
+records instead of deleting them so delivery history remains available.
+
+The scheduler checks every minute and sends at or after the configured morning
+time in each recipient's timezone. If the process restarts later in their local
+day, it catches up on that day's occasions.
+It does not send missed greetings from earlier dates. February 29 occasions run
+only in leap years. Future original years do not match until that year arrives.
+
+A database unique constraint and atomic claim prevent repeat attempts for the
+same record/year across restarts, concurrent workers, and repeated clock hours.
+A send interrupted by shutdown remains sending; a network timeout or ambiguous
+provider result becomes unknown. Explicit provider rejections become failed.
+There are no automatic retries for these states, because delivery may already
+have happened. Check Shivay and reconcile such rows manually before retrying.
+A sent status means Shivay accepted the message, not that the recipient read it.
 
 ## Current limitations
 

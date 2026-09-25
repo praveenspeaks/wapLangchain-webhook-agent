@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.config import settings
+from app.greetings.api import router as greetings_router
 from app.lifespan import lifespan
 from app.logging_config import configure_logging
 from app.state import AppState
@@ -15,4 +16,5 @@ def create_app() -> FastAPI:
     application = FastAPI(title="AI Agent", version="1.0.0", lifespan=lifespan)
     application.state.runtime = AppState()
     application.include_router(router)
+    application.include_router(greetings_router)
     return application

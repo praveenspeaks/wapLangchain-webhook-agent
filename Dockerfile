@@ -34,6 +34,7 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Copy application source
 COPY app/ ./app/
+COPY migrations/ ./migrations/
 COPY main.py ./
 
 # Make sure the venv's bin is in PATH

@@ -29,6 +29,8 @@ dependencies = [
     # Utilities
     "python-json-logger>=3.2.1",  # structured logging
     "python-dotenv>=1.0.1",
+    "httpx>=0.28.1",          # Shivay outbound messaging
+    "tzdata>=2025.2",         # IANA timezones on Windows and minimal containers
 ]
 
 [project.optional-dependencies]

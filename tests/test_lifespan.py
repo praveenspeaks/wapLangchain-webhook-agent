@@ -1,5 +1,6 @@
 """Check resource ownership and cleanup without real connections."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -49,3 +50,42 @@ def test_metrics_belong_to_each_application() -> None:
         )
     assert TestClient(first).get("/metrics").json()["messages_processed"] == 1
     assert TestClient(second).get("/metrics").json()["messages_processed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_enabled_scheduler_is_cancelled_before_resources_close() -> None:
+    from app.lifespan import lifespan
+
+    started, stopped = asyncio.Event(), asyncio.Event()
+
+    async def run_forever() -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
+    pool, sender, repository = AsyncMock(), AsyncMock(), AsyncMock()
+    scheduler = MagicMock()
+    scheduler.run_forever = run_forever
+    saver = MagicMock()
+    saver.setup = AsyncMock()
+    with (
+        patch("app.lifespan.settings") as settings,
+        patch("app.lifespan.AsyncConnectionPool", return_value=pool),
+        patch("app.lifespan.AsyncPostgresSaver", return_value=saver),
+        patch("app.lifespan.build_graph"),
+        patch("app.lifespan.init_pool", new_callable=AsyncMock),
+        patch("app.lifespan.close_pool", new_callable=AsyncMock),
+        patch("app.lifespan.GreetingRepository", return_value=repository),
+        patch("app.lifespan.ShivaySender", return_value=sender),
+        patch("app.lifespan.GreetingScheduler", return_value=scheduler),
+    ):
+        settings.greetings_enabled = True
+        async with lifespan(create_app()):
+            await asyncio.wait_for(started.wait(), timeout=1)
+            sender.aclose.assert_not_awaited()
+        assert stopped.is_set()
+        repository.check_schema.assert_awaited_once()
+        sender.aclose.assert_awaited_once()
+        pool.close.assert_awaited_once()
