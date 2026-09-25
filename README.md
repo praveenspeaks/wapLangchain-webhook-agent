@@ -66,7 +66,7 @@ POST /invoke {sessionId, message}
     -> Final answer returns as {"response": "..."}
 ```
 
-The graph uses the `GROQ_MODEL` setting (default: `llama-3.1-8b-instant`).
+The graph uses the `GROQ_MODEL` setting (default: `openai/gpt-oss-120b`).
 Choose a tool-calling model available to your Groq account in `.env`, then restart
 the application. For Docker, recreate the container to reload its environment.
 Tool execution can repeat within a
@@ -92,7 +92,7 @@ Copy `.env.example` to `.env` if you do not already have one, then configure:
 | Variable | Purpose |
 | --- | --- |
 | GROQ_API_KEY | Required Groq API key |
-| GROQ_MODEL | Groq model ID; defaults to llama-3.1-8b-instant |
+| GROQ_MODEL | Groq model ID; defaults to openai/gpt-oss-120b |
 | POSTGRES_URL | Required PostgreSQL URL for conversation memory |
 | TESTING_DB_URL | Optional separate business database URL |
 | LOG_LEVEL | Logging level; defaults to INFO |

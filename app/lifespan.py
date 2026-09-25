@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Use separate pools for conversation checkpoints and business queries."""
+    logger.info("Configured Groq model", extra={"model": settings.groq_model})
     checkpoint_pool = AsyncConnectionPool(
         settings.postgres_url,
         max_size=10,

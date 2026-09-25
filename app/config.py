@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # LLM
     groq_api_key: str = Field(..., description="Groq API key")
-    groq_model: str = Field("llama-3.1-8b-instant", description="Groq model ID")
+    groq_model: str = Field("openai/gpt-oss-120b", description="Groq model ID")
 
     # Database
     postgres_url: str = Field(...)  # psycopg URL for LangGraph checkpointer
