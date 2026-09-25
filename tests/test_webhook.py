@@ -16,7 +16,7 @@ os.environ.setdefault("TESTING_DB_URL", "postgresql://agent:secret@localhost:543
 
 class TestAgentEndpoint:
     def test_agent_returns_reply(self) -> None:
-        with patch("main.process_message", new=AsyncMock(return_value="Hello!")):
+        with patch("app.api.routes.process_message", new=AsyncMock(return_value="Hello!")):
             from main import app
 
             client = TestClient(app, raise_server_exceptions=False)
@@ -29,7 +29,9 @@ class TestAgentEndpoint:
             assert data["response"] == "Hello!"
 
     def test_agent_returns_error_on_failure(self) -> None:
-        with patch("main.process_message", new=AsyncMock(side_effect=RuntimeError("boom"))):
+        with patch(
+            "app.api.routes.process_message", new=AsyncMock(side_effect=RuntimeError("boom"))
+        ):
             from main import app
 
             client = TestClient(app, raise_server_exceptions=False)

@@ -2,7 +2,7 @@
 tests/test_tools.py
 -------------------
 Unit tests for agent tools.
-Database calls are mocked via ``db.get_pool`` so tests run offline.
+Database calls are mocked at each domain module so tests run offline.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tools import (
+from app.tools import (
     create_support_ticket,
     get_business_hours,
     get_event_tickets,
@@ -67,7 +67,7 @@ def _mock_pool(
 
 class TestGetOrderStatus:
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.orders.get_pool")
     async def test_valid_order_returns_details(self, mock_gp: MagicMock) -> None:
         order_row = {
             "id": "ORD-10001",
@@ -90,7 +90,7 @@ class TestGetOrderStatus:
         assert "error" in result
 
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.orders.get_pool")
     async def test_not_found_returns_error(self, mock_gp: MagicMock) -> None:
         mock_gp.return_value = _mock_pool(fetchone=None)
         result = json.loads(await get_order_status.ainvoke({"order_id": "ORD-99999"}))
@@ -104,7 +104,7 @@ class TestGetOrderStatus:
 
 class TestGetOrdersByStatus:
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.orders.get_pool")
     async def test_valid_status_returns_orders(self, mock_gp: MagicMock) -> None:
         rows = [
             {
@@ -133,7 +133,7 @@ class TestGetOrdersByStatus:
 
 class TestSearchProduct:
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.products.get_pool")
     async def test_matching_query_returns_results(self, mock_gp: MagicMock) -> None:
         rows = [
             {
@@ -152,7 +152,7 @@ class TestSearchProduct:
         assert result["results"][0]["name"] == "Wireless Headphones"
 
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.products.get_pool")
     async def test_no_results_returns_zero(self, mock_gp: MagicMock) -> None:
         mock_gp.return_value = _mock_pool(fetchall=[])
         result = json.loads(await search_product.ainvoke({"query": "xyzzy_nonexistent"}))
@@ -166,7 +166,7 @@ class TestSearchProduct:
 
 class TestGetProductInfo:
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.products.get_pool")
     async def test_found_product(self, mock_gp: MagicMock) -> None:
         row = {
             "id": 1,
@@ -183,7 +183,7 @@ class TestGetProductInfo:
         assert result["in_stock"] is True
 
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.products.get_pool")
     async def test_not_found(self, mock_gp: MagicMock) -> None:
         mock_gp.return_value = _mock_pool(fetchone=None)
         result = json.loads(await get_product_info.ainvoke({"product_id": 999}))
@@ -197,7 +197,15 @@ class TestGetProductInfo:
 
 class TestGetEventTickets:
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @pytest.mark.parametrize("query", ["", " , , "])
+    @patch("app.tools.events.get_pool")
+    async def test_empty_search_returns_error(self, mock_gp: MagicMock, query: str) -> None:
+        mock_gp.return_value = _mock_pool()
+        result = json.loads(await get_event_tickets.ainvoke({"event_name": query}))
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    @patch("app.tools.events.get_pool")
     async def test_found_event(self, mock_gp: MagicMock) -> None:
         rows = [
             {
@@ -218,7 +226,7 @@ class TestGetEventTickets:
         assert result["events"][0]["tickets_remaining"] == 153
 
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.events.get_pool")
     async def test_not_found(self, mock_gp: MagicMock) -> None:
         mock_gp.return_value = _mock_pool(fetchall=[])
         result = json.loads(await get_event_tickets.ainvoke({"event_name": "nonexistent"}))
@@ -232,7 +240,7 @@ class TestGetEventTickets:
 
 class TestCreateSupportTicket:
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.support.get_pool")
     async def test_ticket_created(self, mock_gp: MagicMock) -> None:
         mock_gp.return_value = _mock_pool()
         result = json.loads(
@@ -244,7 +252,7 @@ class TestCreateSupportTicket:
         assert result["status"] == "Open"
 
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.support.get_pool")
     async def test_urgent_gets_high_priority(self, mock_gp: MagicMock) -> None:
         mock_gp.return_value = _mock_pool()
         result = json.loads(
@@ -255,7 +263,7 @@ class TestCreateSupportTicket:
         assert result["priority"] == "High"
 
     @pytest.mark.asyncio
-    @patch("tools.get_pool")
+    @patch("app.tools.support.get_pool")
     async def test_normal_gets_normal_priority(self, mock_gp: MagicMock) -> None:
         mock_gp.return_value = _mock_pool()
         result = json.loads(

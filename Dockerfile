@@ -33,7 +33,8 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 
 # Copy application source
-COPY agent.py db.py models.py main.py tools.py ./
+COPY app/ ./app/
+COPY main.py ./
 
 # Make sure the venv's bin is in PATH
 ENV PATH="/app/.venv/bin:$PATH" \

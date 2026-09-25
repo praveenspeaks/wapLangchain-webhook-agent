@@ -6,9 +6,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
-    # LangGraph & LangChain core  (LangChain 1.x + LangGraph 0.3.x)
-    "langgraph>=0.3.0",
-    "langchain>=1.0.0",
+    # LangChain and LangGraph 1.x; exact versions are recorded in uv.lock.
+    "langgraph>=1.2.12,<2",
+    "langchain>=1.4.2,<2",
     "langchain-groq>=0.3.0",
     "langchain-core>=0.3.50",
     "langgraph-prebuilt>=0.1.0",   # ToolNode, create_react_agent helpers
@@ -48,7 +48,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["app"]
 
 # ---------------------------------------------------------------------------
 # Ruff – linter + formatter (replaces flake8, isort, black)

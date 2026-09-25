@@ -8,11 +8,10 @@
       "request": "launch",
       "module": "uvicorn",
       "args": [
-        "server:app",
+        "main:app",
         "--host", "0.0.0.0",
         "--port", "8000",
-        "--reload",
-        "--log-config", "/dev/null"
+        "--reload"
       ],
       "envFile": "${workspaceFolder}/.env",
       "env": {

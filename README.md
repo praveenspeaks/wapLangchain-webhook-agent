@@ -1,334 +1,187 @@
-# WhatsApp AI Agent
+# Customer Support AI API
 
-Production-ready WhatsApp chatbot built with **LangGraph**, **Shivay API**, and **FastAPI**.
+A Python API that answers customer questions using Groq, LangGraph, and PostgreSQL.
+It looks up orders, searches products, checks event ticket availability, creates
+support tickets, and reports business hours. Conversations are saved by session ID.
 
-```
-WhatsApp ──► Shivay API ──► FastAPI Webhook ──► LangGraph Agent ──► Groq LLM
-     ▲                                        │               │
-     │                                    │      PostgreSQL (history + tools)
-     └────────────────────────────────────┘
-                   reply via API
-```
+Replies return directly over HTTP. A website, mobile app, or messaging gateway can
+call this API. WhatsApp/Shivay integration is not included.
 
-## Features
+## Start reading here
 
-| Feature | Implementation |
-|---|---|
-| WhatsApp gateway | Shivay API v2 |
-| AI agent | LangGraph `StateGraph` + Groq `llama-3.3-70b-versatile` |
-| Conversation persistence | `AsyncPostgresSaver` (per phone-number thread) |
-| 7 DB-backed tools | Orders, products, events, support tickets (real PostgreSQL) |
-| Rate limiting | In-memory sliding window (10 msg / 60 s per user) |
-| Async processing | FastAPI `BackgroundTasks` — webhook returns in < 15 ms |
-| LID support | Handles WhatsApp Linked ID (`@lid`) addresses |
-| Containerisation | Docker Compose (agent + ngrok for dev) |
+1. `main.py` creates the application and is the Uvicorn entry point.
+2. `app/application.py` assembles routes, logging, state, and the resource lifecycle.
+3. `app/api/routes.py` receives messages and calls the agent service.
+4. `app/agent/service.py` runs a conversation turn using the session ID.
+5. `app/agent/graph.py` lets the model call tools until it produces an answer.
+6. `app/tools/` contains business operations, grouped by domain.
 
----
+## Project structure
 
-## Project Structure
-
-```
-.
-├── main.py              # FastAPI app, webhook endpoint, lifespan
-├── agent.py               # LangGraph graph definition + process_message()
-├── tools.py               # 7 LangChain tools backed by PostgreSQL
-├── db.py                  # Async connection pool for tool queries
-├── shivay_client.py       # HTTP client for Shivay API (send/receive)
-├── models.py              # Pydantic models + app settings
-├── schema.sql             # Database schema + sample data
-├── Dockerfile             # Production image
-├── docker-compose.yml     # Agent + ngrok (dev tunnel)
-├── pyproject.toml         # Dependencies (uv/hatch)
-├── .env.example           # Config template
-├── tests/
-│   ├── conftest.py        # Shared fixtures + env defaults
-│   ├── test_webhook.py    # Webhook + model tests
-│   └── test_tools.py      # Tool unit tests (mocked DB)
-└── .vscode/
-    ├── settings.json
-    ├── extensions.json
-    ├── tasks.json
-    ├── launch.json
-    └── rest-client.http   # Sample API requests
+```text
+main.py                     # Entry point: main:app
+app/
+    application.py          # FastAPI application factory
+    config.py               # Environment settings
+    logging_config.py       # JSON console logging
+    lifespan.py             # Startup and shutdown of resources
+    state.py                # Graph reference and per-process metrics
+    database.py             # Shared business-data connection pool
+    api/
+        routes.py           # /invoke, /health, /metrics
+        schemas.py          # HTTP request and response models
+    agent/
+        graph.py            # Model setup, graph nodes, routing
+        prompts.py          # Assistant instructions
+        service.py          # Session handling and answer extraction
+    tools/
+        __init__.py         # Registry of tools exposed to the model
+        orders.py           # Order details and status filtering
+        products.py         # Product search and details
+        events.py           # Event availability
+        support.py          # Support ticket creation
+        business.py         # Business hours (no database)
+tests/                      # Offline tests with mocked external services
+schema.sql                  # Demo schema and sample data
+Dockerfile                  # Container image
+docker-compose.yml          # API and optional ngrok tunnel
 ```
 
----
+The root `agent.py`, `db.py`, `models.py`, and `tools.py` files are compatibility
+imports for existing Python callers. New code should import from `app`.
+The legacy `agent.process_message(phone=...)` call still works; the new service
+uses the clearer name `session_id`.
 
-## Message Flow (end-to-end)
+## How a message travels
 
-### Step-by-step: Receiving a message to sending a reply
-
-```
-WhatsApp User
-     │
-     ▼
-Shivay API
-     │  POST /webhook/shivay  (event: messages.upsert)
-     ▼
-┌─ main.py ─────────────────────────────────────────────────┐
-│                                                              │
-│  webhook_shivay()             ← FastAPI route handler        │
-│    ├─ Normalize event name    (messages.upsert → MESSAGES_UPSERT)
-│    ├─ Parse ShivayMessageData (Pydantic validation)          │
-│    ├─ Skip if fromMe=true                                    │
-│    ├─ Extract text via msg.message.extract_text()            │
-│    ├─ Resolve phone (JID or LID)                             │
-│    ├─ _check_rate_limit(phone) → reject if exceeded          │
-│    └─ background_tasks.add_task(_handle_message, ...)        │
-│                                                              │
-│  _handle_message()            ← runs in background           │
-│    ├─ shivay_client.send_typing(phone)                        │
-│    ├─ process_message(graph, phone, text, push_name)  ──────┼──►
-│    └─ shivay_client.send_text(phone, response)               │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─ agent.py ──────────────────────────────────────────────────┐
-│                                                              │
-│  process_message()                                           │
-│    ├─ Prepend "[User: pushName]" to text                     │
-│    ├─ config = { thread_id: phone }                          │
-│    └─ graph.ainvoke({ messages: [HumanMessage] }, config)    │
-│                                                              │
-│  LangGraph StateGraph:                                       │
-│    START → agent_node → (tool calls?) → tool_node → agent    │
-│                └──────── no ──────────► END                  │
-│                                                              │
-│  _agent_node()                                               │
-│    ├─ Prepend SystemMessage (SYSTEM_PROMPT)                  │
-│    └─ llm_with_tools.ainvoke(messages)  → AIMessage          │
-│                                                              │
-│  _should_continue()                                          │
-│    └─ If AIMessage has tool_calls → "tools", else → END      │
-│                                                              │
-│  ToolNode(TOOLS)           ← auto-executes tool calls        │
-│    └─ Calls matching tool from tools.py                      │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─ tools.py ──────────────────────────────────────────────────┐
-│                                                              │
-│  Each tool calls get_pool() from db.py, runs SQL,            │
-│  returns JSON string for the LLM to humanise.                │
-│                                                              │
-│  get_order_status(order_id)      → orders + order_items      │
-│  get_orders_by_status(status)    → orders filtered           │
-│  search_product(query)           → products ILIKE search     │
-│  get_product_info(product_id)    → single product details    │
-│  get_event_tickets(event_name)   → event ticket availability │
-│  create_support_ticket(issue, contact) → INSERT ticket       │
-│  get_business_hours()            → schedule (no DB)          │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─ db.py ─────────────────────────────────────────────────────┐
-│  AsyncConnectionPool (psycopg3)                              │
-│  init_pool() / close_pool() / get_pool()                     │
-│  Connected to external PostgreSQL (TESTING_DB_URL)           │
-└──────────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─ shivay_client.py ──────────────────────────────────────────┐
-│                                                              │
-│  send_text(to, message)                                      │
-│    POST /message/sendText/{instance}                         │
-│    payload: { "number": to, "text": message }                │
-│                                                              │
-│  send_typing(to)    ← best-effort, silently skipped if 404  │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-              Shivay API → WhatsApp → User sees reply
+```text
+POST /invoke {sessionId, message}
+    -> API validates the request
+    -> Agent service uses sessionId as the conversation thread ID
+    -> LangGraph loads persisted conversation state
+    -> Groq receives the conversation and system instructions
+    -> Model optionally requests a tool
+    -> Tool queries PostgreSQL (or creates a support ticket)
+    -> Tool result returns to the model
+    -> Final answer returns as {"response": "..."}
 ```
 
-### Function call chain (compact)
+The graph uses the `GROQ_MODEL` setting (default: `llama-3.1-8b-instant`).
+Choose a tool-calling model available to your Groq account in `.env`, then restart
+the application. For Docker, recreate the container to reload its environment.
+Tool execution can repeat within a
+turn, with a graph recursion limit of 10. Requests await the answer; there is no
+background delivery or streaming endpoint.
 
-```
-main.webhook_shivay()
-  → main._handle_message()           (BackgroundTask)
-    → shivay_client.send_typing()       (best-effort)
-    → agent.process_message()
-      → graph.ainvoke()
-        → agent._agent_node()          (LLM call with tools)
-        → agent._should_continue()     (route to tools or END)
-        → ToolNode → tools.*()         (DB queries via db.get_pool())
-        → agent._agent_node()          (final response)
-    → shivay_client.send_text()         (reply to WhatsApp)
-```
+Conversation checkpoints and business queries use separate connection pools.
+`POSTGRES_URL` stores conversation checkpoints. `TESTING_DB_URL` selects the
+business database, despite its historical name; when omitted, it falls back to
+`POSTGRES_URL`. Tools share one business pool per process. Run one application
+lifecycle per process.
 
----
+## Run locally
 
-## Startup / Lifespan
+Requires Python 3.12+, uv, PostgreSQL, and a Groq API key.
 
-When the main starts (`main.py:lifespan()`):
-
-1. **PostgreSQL pool** — `AsyncConnectionPool` for LangGraph checkpointer (`POSTGRES_URL`)
-2. **Checkpointer** — `AsyncPostgresSaver.setup()` creates checkpoint tables
-3. **Agent graph** — `build_graph(checkpointer)` compiles the `StateGraph`
-4. **Tool DB pool** — `db.init_pool()` opens a separate pool for business data (`TESTING_DB_URL`)
-
-On shutdown: closes tool pool, checkpointer pool, and HTTP client.
-
----
-
-## Agent Tools
-
-| Tool | Description | DB Table |
-|---|---|---|
-| `get_order_status(order_id)` | Order details + line items | `orders`, `order_items` |
-| `get_orders_by_status(status)` | List orders by status | `orders` |
-| `search_product(query)` | ILIKE search on name/category | `products` |
-| `get_product_info(product_id)` | Full product details by ID | `products` |
-| `get_event_tickets(event_name)` | Tickets sold + remaining | `event_tickets` |
-| `create_support_ticket(issue, contact)` | Insert support ticket | `support_tickets` |
-| `get_business_hours()` | Operating hours + open/closed | (none) |
-
-### Adding a new tool
-
-1. Add a `@tool` async function in `tools.py`
-2. Append it to the `TOOLS` list at the bottom
-3. Update `SYSTEM_PROMPT` in `agent.py` to describe the new tool
-4. No other changes needed — ToolNode auto-discovers tools from the list
-
----
-
-## Quick Start
-
-### Prerequisites
-- Docker Desktop >= 24.0
-- Python 3.12+ (for local dev without Docker)
-- `uv` package manager
-- Groq API key — [console.groq.com](https://console.groq.com)
-- Shivay API instance
-- External PostgreSQL database with `schema.sql` applied
-
-### 1. Clone & configure
-
-```bash
-git clone <your-repo>
-cd whatsapp-agent
-cp .env.example .env
-# Edit .env with your keys
+```sh
+uv sync --extra dev
 ```
 
-### 2. Set up database
+Copy `.env.example` to `.env` if you do not already have one, then configure:
 
-```bash
-psql -h <host> -U <user> -d <dbname> -f schema.sql
+| Variable | Purpose |
+| --- | --- |
+| GROQ_API_KEY | Required Groq API key |
+| GROQ_MODEL | Groq model ID; defaults to llama-3.1-8b-instant |
+| POSTGRES_URL | Required PostgreSQL URL for conversation memory |
+| TESTING_DB_URL | Optional separate business database URL |
+| LOG_LEVEL | Logging level; defaults to INFO |
+| ENVIRONMENT | Environment label; defaults to development |
+| NGROK_AUTHTOKEN | Only needed for the optional development tunnel |
+
+For a new disposable demo database, run `schema.sql` against the business database.
+**This script drops and recreates business tables and inserts sample data.**
+It is not a production migration. Startup creates the LangGraph checkpoint tables,
+but does not create business tables.
+
+```sh
+psql "YOUR_BUSINESS_DATABASE_URL" -f schema.sql
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Run with Docker
+Open http://localhost:8000/docs to explore and try the API.
 
-```bash
-# Production (agent only)
-docker compose up -d
+## API
 
-# Development (agent + ngrok tunnel)
-docker compose --profile dev up -d
+`POST /invoke` accepts:
+
+```json
+{
+  "sessionId": "user123",
+  "message": "What is the status of ORD-10001?"
+}
 ```
 
-### 4. Get ngrok URL (dev only)
+It returns a `response` string. Reuse the same session ID for follow-up questions.
 
-```bash
-curl -s http://localhost:4040/api/tunnels | python -m json.tool
+- `GET /health`: process liveness; does not check database or model availability.
+- `GET /metrics`: processed/failed counters and uptime, reset on restart.
+  Handled agent errors return fallback text and currently count as processed.
+
+## Docker
+
+Configure `.env` with database URLs reachable from inside the container.
+
+```sh
+docker compose up --build -d
 ```
 
-Copy the `public_url` and set it as the webhook URL in your Shivay API dashboard:
-```
-https://<ngrok-id>.ngrok-free.dev/webhook/shivay
-```
+PostgreSQL is external; Compose does not create it. To also run the development
+tunnel, use `docker compose --profile dev up --build -d`.
 
-### 5. Configure Shivay API webhook
+## Make changes
 
-In your Shivay API dashboard, set:
-- **Webhook URL**: `https://<your-domain>/webhook/shivay`
-- **Events**: `messages.upsert`
+| What you want to change | Where to work |
+| --- | --- |
+| Add/change an HTTP endpoint | app/api/routes.py and app/api/schemas.py |
+| Change assistant tone or tool-selection rules | app/agent/prompts.py |
+| Change model parameters or graph routing | app/agent/graph.py |
+| Change conversation handling | app/agent/service.py |
+| Change a query or business rule | Relevant module in app/tools/ |
+| Add an environment setting | app/config.py and .env.example |
+| Change startup or cleanup | app/lifespan.py |
+| Change connection pool behavior | app/database.py |
 
-### 6. Test it
+To add a tool, define an async function with the LangChain `@tool` decorator
+and a clear docstring in the appropriate domain module. Register it in
+`app/tools/__init__.py`, describe its intended use in the system prompt, and add
+a test. Keep HTTP handling in the API layer and SQL/business operations in tools.
 
-Send a WhatsApp message to your connected number and watch logs:
-```bash
-docker compose logs -f agent
-```
+## Verify changes
 
----
+Dependencies are resolved in `uv.lock`; Docker uses that lockfile too.
+After changing dependencies, sync the environment and regenerate the pip export
+from the same lockfile so both installation methods use matching versions:
 
-## Local Development (without Docker)
-
-```bash
-uv sync                    # Install dependencies
-cp .env.example .env       # Configure
-uv run python main.py    # Start with hot reload on :8000
-```
-
-Or use VS Code task: **Run: FastAPI (hot-reload)**
-
----
-
-## Running Tests
-
-```bash
-uv run pytest tests/ -v
+```sh
+uv sync --locked --extra dev
+uv export --frozen --no-dev --no-emit-project --no-hashes --output-file requirements.txt
 ```
 
-Tests mock `db.get_pool()` so no real database connection is needed.
+```sh
+uv run pytest -q
+uv run ruff check .
+uv run ruff format --check .
+```
 
----
+Tests mock database and model calls. They cover tool behavior, HTTP responses,
+conversation memory, tool routing, and resource cleanup without external access.
+They do not prove live Groq, PostgreSQL, or Docker connectivity.
 
-## Configuration
+## Current limitations
 
-All settings are read from environment variables (or `.env`).
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `GROQ_API_KEY` | Yes | — | Groq LLM API key |
-| `SHIVAY_API_URL` | Yes | — | Shivay API base URL |
-| `SHIVAY_API_KEY` | Yes | — | Shivay API key |
-| `SHIVAY_INSTANCE_NAME` | Yes | — | WhatsApp instance name |
-| `POSTGRES_URL` | Yes | — | psycopg PostgreSQL URL (checkpointer) |
-| `TESTING_DB_URL` | No | `POSTGRES_URL` | psycopg URL for business data DB |
-| `RATE_LIMIT_MAX` | No | `10` | Max messages per window |
-| `RATE_LIMIT_WINDOW` | No | `60` | Window size in seconds |
-| `LOG_LEVEL` | No | `INFO` | Python log level |
-| `ENVIRONMENT` | No | `development` | `development` or `production` |
-| `NGROK_AUTHTOKEN` | No | — | ngrok auth token (dev only) |
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/webhook/shivay` | Shivay API webhook (main entry point) |
-| `GET` | `/health` | Health check |
-| `GET` | `/metrics` | Messages processed/failed + uptime |
-
-Interactive docs: `http://localhost:8000/docs`
-
----
-
-## Tech Stack
-
-| Component | Technology |
-|---|---|
-| AI Framework | LangGraph 0.3+ (StateGraph) |
-| LLM | Groq — Llama 3.3 70B Versatile |
-| Web Framework | FastAPI + Uvicorn |
-| WhatsApp Gateway | Shivay API v2 |
-| Database | PostgreSQL (psycopg3 async) |
-| Checkpointer | `langgraph-checkpoint-postgres` |
-| HTTP Client | httpx (async) |
-| Retry Logic | tenacity |
-| Validation | Pydantic v2 + pydantic-settings |
-| Logging | python-json-logger (structured JSON) |
-| Package Manager | uv + hatch |
-
----
-
-## License
-
-MIT
+Authentication, customer-level order authorization, rate limiting, and conversation
+history limits are not implemented. Session IDs are supplied by the caller.
+Support ticket IDs use random five-digit numbers without collision retries, and
+the database contact column is limited to 20 characters. Business hours use a
+fixed UTC schedule without holiday-calendar checks.
