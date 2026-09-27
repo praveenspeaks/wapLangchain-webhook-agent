@@ -286,6 +286,18 @@ fixed UTC schedule without holiday-calendar checks.
 
 ## WhatsApp archive, nightly summary, and owner data entry
 
+The main chat endpoint (`/invoke`, including deployment Quick Test) also supports
+natural-language birthday and anniversary entry. For example, "My friend Anjani
+Kumar Singh has birthday on 16th October, can you add" collects the name and date,
+then asks for the recipient's international phone number, country and timezone.
+The original year is optional. Send follow-up answers with the **same sessionId**
+so conversation memory retains the earlier details. Once all required fields are
+valid, the agent saves to `greeting_occasions`; missing details do not create a
+support ticket. It confirms saving only after the database tool succeeds and
+reports if automatic greeting delivery is disabled. Restart/redeploy to load the
+new tool and prompt. The owner-only WhatsApp `/add` → `/save` workflow below is
+unchanged.
+
 The Shivay webhook `POST /webhook/shivay` stores group and direct messages in
 `whatsapp_messages`. It records text/captions, sender, chat, time and `fromMe`;
 attachments are not downloaded or transcribed. Duplicate webhook deliveries are

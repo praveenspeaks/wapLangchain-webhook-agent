@@ -1,6 +1,7 @@
 """Compatibility imports. Tool implementations live in app.tools by domain."""
 
 from app.tools import TOOLS as TOOLS
+from app.tools import add_greeting_occasion as add_greeting_occasion
 from app.tools import create_support_ticket as create_support_ticket
 from app.tools import get_business_hours as get_business_hours
 from app.tools import get_event_tickets as get_event_tickets
