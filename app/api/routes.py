@@ -66,6 +66,12 @@ async def health() -> HealthResponse:
     return HealthResponse(status="healthy")
 
 
+@router.get("/version")
+async def version() -> dict[str, str]:
+    """Identify deployments containing deterministic greeting validation replies."""
+    return {"service": "wapLangchain", "greeting_workflow": "schema-v2"}
+
+
 @router.get("/metrics")
 async def metrics(request: Request) -> dict[str, Any]:
     state: AppState = request.app.state.runtime

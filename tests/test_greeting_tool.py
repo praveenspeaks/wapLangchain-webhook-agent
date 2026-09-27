@@ -69,12 +69,10 @@ async def test_graph_collects_details_across_turns_then_saves() -> None:
             content="",
             tool_calls=[{"name": "add_greeting_occasion", "args": PARTIAL, "id": "first"}],
         ),
-        AIMessage(content="What are his phone number, country and timezone?"),
         AIMessage(
             content="",
             tool_calls=[{"name": "add_greeting_occasion", "args": COMPLETE, "id": "second"}],
         ),
-        AIMessage(content="Saved Anjani's birthday for 16 October."),
     ]
     with (
         patch("app.agent.graph._build_llm", return_value=model),
@@ -83,22 +81,26 @@ async def test_graph_collects_details_across_turns_then_saves() -> None:
     ):
         create = repository.return_value.create = AsyncMock(return_value={"id": 42})
         graph = build_graph(MemorySaver())
-        await process_message(
+        reply = await process_message(
             graph=graph,
             session_id="birthday-test",
             text="my friend Anjani Kumar Singh has birthday on 16th October, can you add",
         )
         create.assert_not_awaited()
+        assert "country" in reply and "timezone" in reply and "WhatsApp number" in reply
+        assert "instance" not in reply
         await process_message(
             graph=graph, session_id="birthday-test", text="+447700900123, UK, London time"
         )
         create.assert_awaited_once()
         support_pool.assert_not_called()
-        tool_results = [m for m in model.ainvoke.call_args.args[0] if isinstance(m, ToolMessage)]
+        snapshot = await graph.aget_state({"configurable": {"thread_id": "birthday-test"}})
+        tool_results = [m for m in snapshot.values["messages"] if isinstance(m, ToolMessage)]
         assert [json.loads(m.content)["status"] for m in tool_results] == [
             "needs_details",
             "created",
         ]
+        assert model.ainvoke.await_count == 2  # No model rewrite of validated outcomes.
 
 
 @pytest.mark.asyncio
