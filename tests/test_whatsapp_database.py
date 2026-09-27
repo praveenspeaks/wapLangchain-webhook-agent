@@ -4,6 +4,7 @@ Run with WHATSAPP_TEST_DATABASE_URL pointing at a test database.
 """
 
 import asyncio
+import json
 import os
 import re
 import sys
@@ -18,6 +19,7 @@ from psycopg import AsyncConnection, sql
 from psycopg_pool import AsyncConnectionPool
 from test_whatsapp import configuration, payload
 
+from app.tools.greetings import add_greeting_occasion
 from app.whatsapp.api import shivay_webhook
 from app.whatsapp.llm import WhatsAppLLM
 from app.whatsapp.messages import WebhookEvent
@@ -47,6 +49,29 @@ async def exercise_database(url: str) -> None:
             kwargs={"autocommit": True, "options": f"-c search_path={schema}"},
         )
         await pool.open(wait=True)
+        # Exercise the real chat tool and repository, not only the command writer.
+        with patch("app.greetings.repository.get_pool", return_value=pool):
+            result = json.loads(
+                await add_greeting_occasion.ainvoke(
+                    {
+                        "name": "Synthetic Example",
+                        "occasion": "birthday",
+                        "month": 10,
+                        "day": 16,
+                        "country": "GB",
+                        "timezone": "Europe/London",
+                        "phone_number": "+447700900123",
+                    }
+                )
+            )
+            assert result["status"] == "created"
+            row = await (
+                await admin.execute(
+                    "SELECT name,month,day,country,timezone FROM greeting_occasions WHERE id = %s",
+                    (result["id"],),
+                )
+            ).fetchone()
+            assert row == ("Synthetic Example", 10, 16, "GB", "Europe/London")
         config = configuration(whatsapp_data_entry_enabled=True, whatsapp_summaries_enabled=True)
         llm, sender = WhatsAppLLM(config), AsyncMock()
         worker = WhatsAppWorker(config, sender, llm)
