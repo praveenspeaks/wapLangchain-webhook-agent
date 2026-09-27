@@ -1,6 +1,7 @@
 """Greeting chat tool must validate before writing and never create tickets."""
 
 import json
+import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -98,3 +99,38 @@ async def test_graph_collects_details_across_turns_then_saves() -> None:
             "needs_details",
             "created",
         ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.getenv("RUN_LIVE_GROQ_TEST") != "1", reason="Opt-in live model check")
+async def test_live_model_asks_only_for_missing_recipient_details() -> None:
+    """Exercise the actual model decision; all database writes are forbidden."""
+    with (
+        patch("app.tools.greetings.GreetingRepository") as repository,
+        patch(
+            "app.tools.support.get_pool", side_effect=AssertionError("No support ticket")
+        ) as support,
+    ):
+        graph = build_graph(MemorySaver())
+        reply = await process_message(
+            graph=graph,
+            session_id="live-greeting-intent",
+            text="This is a synthetic test: my fictional friend Example Person has birthday "
+            "on 16th October, "
+            "i want the greet him on that day",
+        )
+        snapshot = await graph.aget_state({"configurable": {"thread_id": "live-greeting-intent"}})
+        results = [m for m in snapshot.values["messages"] if isinstance(m, ToolMessage)]
+        assert results and all(m.name == "add_greeting_occasion" for m in results)
+        result = json.loads(results[-1].content)
+        assert result["status"] == "needs_details"
+        assert {issue["field"] for issue in result["issues"]} == {
+            "country",
+            "timezone",
+            "phone_number",
+        }
+        assert "instance" not in reply.lower()
+        assert "api key" not in reply.lower()
+        repository.assert_not_called()
+        support.assert_not_called()
+        print(reply)

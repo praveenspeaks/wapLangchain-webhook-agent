@@ -25,13 +25,15 @@ async def add_greeting_occasion(
     timezone: str | None = None,
     year: int | None = None,
 ) -> str:
-    """Add a requested birthday/anniversary greeting, or report missing/invalid fields.
+    """Schedule a birthday/anniversary greeting, or report missing/invalid recipient fields.
 
     Pass only details supplied by the user across this conversation. Missing fields
     can be omitted. Year is optional; never guess a birth/anniversary year.
     country is a two-letter country code; timezone is the recipient's IANA timezone.
     phone_number must include + and country code. All required details must be valid
     before a record is created. This does not send a message or open a support ticket.
+    Delivery uses the configured WhatsApp instance, built-in greeting text, and local
+    morning schedule. Never request instance/API settings, message text or a channel.
     """
     supplied = {
         "name": name,
@@ -54,8 +56,11 @@ async def add_greeting_occasion(
             {
                 "status": "needs_details",
                 "issues": issues,
-                "instruction": "Ask for these details; do not open a support ticket. "
-                "The original year is optional. No record was saved.",
+                "instruction": "Ask ONLY for the recipient fields listed in issues. "
+                "Do not request instance name, credentials, sender number, message text, "
+                "channel or send time; delivery uses server configuration and a built-in "
+                "greeting. Do not open a support ticket. The original year is optional. "
+                "No record was saved.",
             }
         )
     try:
