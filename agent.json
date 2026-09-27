@@ -29,7 +29,7 @@
                       "health":  "/health",
                       "metrics":  "/metrics",
                       "whatsapp":  {
-                                       "path":  "/webhook/shivay",
+                                       "path":  "/webhook",
                                        "method":  "POST"
                                    }
                   },

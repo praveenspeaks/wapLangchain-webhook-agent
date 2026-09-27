@@ -286,6 +286,42 @@ fixed UTC schedule without holiday-calendar checks.
 
 ## WhatsApp archive, nightly summary, and owner data entry
 
+### Connection Hub integration
+
+Set the agent webhook URL in Connection Hub to `https://YOUR_AGENT_HOST/webhook`
+(`/invoke` also works). Both accept the direct Connection Hub body, an n8n
+`{"body": {...}}` wrapper, or a one-item array containing that wrapper. Send one
+message per request. The legacy `{"sessionId":"...","message":"..."}` format
+continues to work for Quick Test.
+
+The agent reads `message` and `sessionId`, falling back to `data.message` and an
+instance/chat-derived session when needed. It returns `{"response":"reply text"}`.
+Configure the hub to forward this `response` to the originating WhatsApp chat.
+Skip sending when `response` is empty: outgoing `fromMe` events, unsupported event
+types and messages without text/captions do not trigger automatic chat replies.
+The hub handles WhatsApp delivery; the agent does not call a URL from the payload
+or use its `apikey`. Provider credentials and transport metadata are not sent to
+the model. JSON must contain actual URLs/JIDs, not Markdown links copied from chat.
+
+For simple hub request/reply use, no `SHIVAY_*` values are required; keep
+`WHATSAPP_ENABLED`, `WHATSAPP_DATA_ENTRY_ENABLED`, `WHATSAPP_SUMMARIES_ENABLED`,
+and `GREETINGS_ENABLED` false. These switches control the archive/background
+features, not the `/webhook` chat endpoint.
+
+For archiving and scheduled summaries, enable/configure the features below and
+have the hub attach the actual HTTP header `X-Webhook-Secret`. The JSON wrapper's
+`headers` object does not authenticate a request. The event instance must match
+`SHIVAY_INSTANCE_NAME`. Hub events are then archived before processing; duplicate
+events return an empty response. Outgoing owner `/add` commands are archived for
+the existing worker, which sends its replies privately, so the hub must not send
+an additional reply. Do not forward the same event to both webhook endpoints.
+
+Keep `SHIVAY_API_URL`, `SHIVAY_API_KEY`, and `SHIVAY_INSTANCE_NAME` for proactive
+greetings, daily summaries, and private command feedback: these sends happen
+outside the hub's request/response cycle. `GREETINGS_ADMIN_API_KEY` is only for
+the greetings management API. The direct `/webhook/shivay` endpoint remains
+available as a capture-only adapter; it does not return a chat answer.
+
 The main chat endpoint (`/invoke`, including deployment Quick Test) also supports
 natural-language birthday and anniversary entry. For example, "My friend Anjani
 Kumar Singh has birthday on 16th October, can you add" collects the name and date,
