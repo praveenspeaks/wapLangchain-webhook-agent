@@ -1,60 +1,72 @@
 {
-  "name": "AI Agent Webhook",
-  "description": "LangGraph agent with Groq LLM, invoked via webhook, replies in HTTP response.",
-  "version": "1.0.0",
-  "entryPoint": "main.py",
-  "port": 8000,
-  "healthCheck": {
-    "path": "/health",
-    "port": 8000
-  },
-  "language": "python",
-  "framework": "langgraph",
-  "llm": "groq/openai/gpt-oss-120b",
-  "tools": [
-    "get_order_status",
-    "get_orders_by_status",
-    "search_product",
-    "get_product_info",
-    "get_event_tickets",
-    "create_support_ticket",
-    "get_business_hours"
-  ],
-  "endpoints": {
-    "agent": {
-      "path": "/invoke",
-      "method": "POST"
-    },
-    "health": "/health",
-    "metrics": "/metrics"
-  },
-  "dependencies": [
-    "langgraph",
-    "langchain",
-    "langchain-groq",
-    "fastapi",
-    "uvicorn",
-    "psycopg",
-    "psycopg-pool",
-    "pydantic",
-    "python-json-logger",
-    "python-dotenv"
-  ],
-  "docker": {
-    "compose": "docker-compose.yml",
-    "dockerfile": "Dockerfile"
-  },
-  "env": [
-    "GROQ_API_KEY",
-    "POSTGRES_URL",
-    "LOG_LEVEL",
-    "ENVIRONMENT",
-    "GROQ_MODEL",
-    "GREETINGS_ENABLED",
-    "GREETINGS_TIME",
-    "GREETINGS_ADMIN_API_KEY",
-    "SHIVAY_API_URL",
-    "SHIVAY_API_KEY",
-    "SHIVAY_INSTANCE_NAME"
-  ]
+    "name":  "AI Agent Webhook",
+    "description":  "LangGraph agent with Groq LLM, invoked via webhook, replies in HTTP response.",
+    "version":  "1.0.0",
+    "entryPoint":  "main.py",
+    "port":  8000,
+    "healthCheck":  {
+                        "path":  "/health",
+                        "port":  8000
+                    },
+    "language":  "python",
+    "framework":  "langgraph",
+    "llm":  "groq/openai/gpt-oss-120b",
+    "tools":  [
+                  "get_order_status",
+                  "get_orders_by_status",
+                  "search_product",
+                  "get_product_info",
+                  "get_event_tickets",
+                  "create_support_ticket",
+                  "get_business_hours"
+              ],
+    "endpoints":  {
+                      "agent":  {
+                                    "path":  "/invoke",
+                                    "method":  "POST"
+                                },
+                      "health":  "/health",
+                      "metrics":  "/metrics",
+                      "whatsapp":  {
+                                       "path":  "/webhook/shivay",
+                                       "method":  "POST"
+                                   }
+                  },
+    "dependencies":  [
+                         "langgraph",
+                         "langchain",
+                         "langchain-groq",
+                         "fastapi",
+                         "uvicorn",
+                         "psycopg",
+                         "psycopg-pool",
+                         "pydantic",
+                         "python-json-logger",
+                         "python-dotenv"
+                     ],
+    "docker":  {
+                   "compose":  "docker-compose.yml",
+                   "dockerfile":  "Dockerfile"
+               },
+    "env":  [
+                "GROQ_API_KEY",
+                "POSTGRES_URL",
+                "LOG_LEVEL",
+                "ENVIRONMENT",
+                "GROQ_MODEL",
+                "GREETINGS_ENABLED",
+                "GREETINGS_TIME",
+                "GREETINGS_ADMIN_API_KEY",
+                "SHIVAY_API_URL",
+                "SHIVAY_API_KEY",
+                "SHIVAY_INSTANCE_NAME",
+                "SHIVAY_WEBHOOK_SECRET",
+                "WHATSAPP_DATA_ENTRY_ENABLED",
+                "WHATSAPP_ENABLED",
+                "WHATSAPP_OWNER_NUMBER",
+                "WHATSAPP_SUMMARIES_ENABLED",
+                "WHATSAPP_SUMMARY_MAX_MESSAGES",
+                "WHATSAPP_SUMMARY_TIME",
+                "WHATSAPP_SUMMARY_TIMEZONE"
+            ]
 }

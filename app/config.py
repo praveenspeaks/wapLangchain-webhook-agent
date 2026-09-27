@@ -1,8 +1,10 @@
 """Load application settings from environment variables and .env."""
 
+import re
 from datetime import time
 from typing import Any, Self
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,21 +44,49 @@ class Settings(BaseSettings):
     shivay_api_url: str = ""
     shivay_api_key: SecretStr = SecretStr("")
     shivay_instance_name: str = ""
+    shivay_webhook_secret: SecretStr = SecretStr("")
+    whatsapp_enabled: bool = False
+    whatsapp_owner_number: str = ""
+    whatsapp_data_entry_enabled: bool = False
+    whatsapp_summaries_enabled: bool = False
+    whatsapp_summary_time: str = "21:00"
+    whatsapp_summary_timezone: str = "Europe/London"
+    whatsapp_summary_max_messages: int = Field(default=0, ge=0)
 
-    @field_validator("greetings_time")
+    @field_validator("whatsapp_summary_timezone")
+    @classmethod
+    def validate_summary_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (KeyError, ValueError) as exc:
+            raise ValueError("Use an IANA timezone such as Europe/London") from exc
+        return value
+
+    @field_validator("greetings_time", "whatsapp_summary_time")
     @classmethod
     def validate_greeting_time(cls, value: str) -> str:
         if len(value) != 5 or value[2] != ":":
-            raise ValueError("GREETINGS_TIME must be HH:MM in 24-hour format")
+            raise ValueError("Scheduled time must be HH:MM in 24-hour format")
         time.fromisoformat(value)
         return value
 
     @model_validator(mode="after")
     def validate_greeting_delivery(self) -> Self:
-        if self.greetings_enabled:
+        outbound = self.whatsapp_data_entry_enabled or self.whatsapp_summaries_enabled
+        if outbound and not self.whatsapp_enabled:
+            raise ValueError("Enable WHATSAPP_ENABLED for data entry or summaries")
+        if self.whatsapp_enabled and (
+            not self.shivay_webhook_secret.get_secret_value() or not self.shivay_instance_name
+        ):
+            raise ValueError(
+                "WhatsApp capture requires SHIVAY_WEBHOOK_SECRET and SHIVAY_INSTANCE_NAME"
+            )
+        if outbound and not re.fullmatch(r"\+[1-9][0-9]{7,14}", self.whatsapp_owner_number):
+            raise ValueError("WHATSAPP_OWNER_NUMBER must include + and the country code")
+        if self.greetings_enabled or outbound:
             if not self.shivay_api_key.get_secret_value() or not self.shivay_instance_name.strip():
                 raise ValueError(
-                    "Greeting delivery requires SHIVAY_API_KEY and SHIVAY_INSTANCE_NAME"
+                    "WhatsApp delivery requires SHIVAY_API_KEY and SHIVAY_INSTANCE_NAME"
                 )
             url = urlsplit(self.shivay_api_url)
             if (

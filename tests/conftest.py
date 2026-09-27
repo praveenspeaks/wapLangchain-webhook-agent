@@ -6,6 +6,9 @@ import os
 
 # Offline tests must never start the real outbound greeting scheduler.
 os.environ["GREETINGS_ENABLED"] = "false"
+os.environ["WHATSAPP_ENABLED"] = "false"
+os.environ["WHATSAPP_DATA_ENTRY_ENABLED"] = "false"
+os.environ["WHATSAPP_SUMMARIES_ENABLED"] = "false"
 
 # Ensure required env vars are set before any module import
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")

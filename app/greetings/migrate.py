@@ -14,7 +14,7 @@ def main() -> None:
         for path in sorted(directory.glob("*.sql")):
             # These are idempotent, version-controlled files, never user-provided SQL.
             connection.execute(cast(LiteralString, path.read_text(encoding="utf-8")))
-    print("Greeting tables are ready in the business database.")
+    print("Greeting and WhatsApp tables are ready in the business database.")
 
 
 if __name__ == "__main__":

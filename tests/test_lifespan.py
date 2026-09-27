@@ -82,6 +82,9 @@ async def test_enabled_scheduler_is_cancelled_before_resources_close() -> None:
         patch("app.lifespan.GreetingScheduler", return_value=scheduler),
     ):
         settings.greetings_enabled = True
+        settings.whatsapp_enabled = False
+        settings.whatsapp_data_entry_enabled = False
+        settings.whatsapp_summaries_enabled = False
         async with lifespan(create_app()):
             await asyncio.wait_for(started.wait(), timeout=1)
             sender.aclose.assert_not_awaited()

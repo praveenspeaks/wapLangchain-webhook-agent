@@ -8,6 +8,7 @@ from app.greetings.api import router as greetings_router
 from app.lifespan import lifespan
 from app.logging_config import configure_logging
 from app.state import AppState
+from app.whatsapp.api import router as whatsapp_router
 
 
 def create_app() -> FastAPI:
@@ -17,4 +18,5 @@ def create_app() -> FastAPI:
     application.state.runtime = AppState()
     application.include_router(router)
     application.include_router(greetings_router)
+    application.include_router(whatsapp_router)
     return application

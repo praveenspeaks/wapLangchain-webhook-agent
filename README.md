@@ -283,3 +283,132 @@ history limits are not implemented. Session IDs are supplied by the caller.
 Support ticket IDs use random five-digit numbers without collision retries, and
 the database contact column is limited to 20 characters. Business hours use a
 fixed UTC schedule without holiday-calendar checks.
+
+## WhatsApp archive, nightly summary, and owner data entry
+
+The Shivay webhook `POST /webhook/shivay` stores group and direct messages in
+`whatsapp_messages`. It records text/captions, sender, chat, time and `fromMe`;
+attachments are not downloaded or transcribed. Duplicate webhook deliveries are
+ignored. This endpoint captures messages without automatically replying to other people.
+
+To enable:
+
+1. Run `python -m app.greetings.migrate` against the business database. This applies
+   all additive migrations, including `003_whatsapp_capture_and_entries.sql`.
+   Existing products/orders/event/support tables must already exist. Do not run
+   the destructive sample `schema.sql` against a database containing real data.
+2. Fill these settings in `.env` locally and in your deployment environment:
+
+   ```dotenv
+   WHATSAPP_ENABLED=true
+   WHATSAPP_OWNER_NUMBER=+YOUR_COUNTRY_CODE_AND_NUMBER
+   SHIVAY_WEBHOOK_SECRET=YOUR_RANDOM_SECRET
+   WHATSAPP_DATA_ENTRY_ENABLED=true
+   WHATSAPP_SUMMARIES_ENABLED=true
+   WHATSAPP_SUMMARY_TIME=21:00
+   WHATSAPP_SUMMARY_TIMEZONE=Europe/London
+   WHATSAPP_SUMMARY_MAX_MESSAGES=0
+   ```
+
+   Also set `SHIVAY_API_URL`, `SHIVAY_API_KEY`, `SHIVAY_INSTANCE_NAME` and
+   `GROQ_API_KEY`. Use your connected WhatsApp account's number for the owner.
+   Features default to disabled until configured. Restart after configuration changes.
+3. Configure Shivay to forward `messages.upsert` / `MESSAGES_UPSERT` events to
+   `https://YOUR_HOST/webhook/shivay`, including incoming group/direct messages and
+   outgoing `fromMe` messages. Configure the custom header `X-Webhook-Secret` with
+   the same secret. The endpoint checks both this header and the instance name;
+   an API key inside the event body is not accepted as webhook authentication.
+   If your Shivay installation cannot attach custom headers, its adapter/proxy
+   must provide this header. Verify its event payload matches the example below.
+4. Keep the application running continuously for timers and command processing.
+
+Accepted event shape (the `data` field can also be a list):
+
+```json
+{
+  "event": "messages.upsert",
+  "instance": "YOUR_INSTANCE",
+  "data": {
+    "key": {"remoteJid": "123@g.us", "fromMe": false,
+            "id": "UNIQUE_MESSAGE_ID", "participant": "447700900123@s.whatsapp.net"},
+    "messageTimestamp": 1790351821,
+    "pushName": "Alex",
+    "message": {"conversation": "Meet tomorrow at 10 AM"}
+  }
+}
+```
+
+At 9 PM London time (including DST), one daily digest is prepared privately for
+`WHATSAPP_OWNER_NUMBER`. It covers messages received by this app since the previous
+9 PM cutoff, excluding your messages and the agent's outgoing messages. Processing
+starts within a minute of the cutoff; generation and delivery take additional time.
+Long digests arrive in multiple WhatsApp parts. There is no past-message import.
+A restart after the cutoff catches up that same day, not previous missed days.
+
+`WHATSAPP_SUMMARY_MAX_MESSAGES=0` includes all captured incoming messages; a positive
+value caps the number and the digest explicitly labels itself partial. Summaries
+use batches of 15 messages, paced 30 seconds apart, via `GROQ_MODEL`. Each message's
+first 600 characters are summarized; the digest discloses when text was shortened.
+Groq failures leave the summary uncommitted for a later attempt. Availability and
+rate limits still depend on your Groq account. Message content is sent to Groq for
+summarization; stored message bodies are not shortened.
+
+### Add records through your own WhatsApp messages
+
+Send commands from the connected owner account (the provider must report
+`fromMe=true`), preferably in your self-chat. Ordinary messages do not create
+records. The agent sends feedback privately to the configured owner number.
+Only one active draft is kept per instance, persisted across restarts.
+
+```text
+/add restaurant {"name":"The Olive Tree"}
+```
+
+The agent asks for `location`. Supply it, inspect the returned draft, then save:
+
+```text
+/set {"location":"Richmond, London","cuisine":"Mediterranean"}
+/save
+```
+
+Natural language also works: `/add service Sam, plumber, +447700900123, Richmond`.
+`/set` accepts additional details or JSON corrections. `/draft` shows the draft,
+`/cancel` discards it, and `/help` lists commands. JSON entry bypasses the LLM.
+Missing or invalid fields prevent saving. Corrections must be reviewed again.
+A successful `/save` returns the created record ID. Database constraint failures
+retain the draft, allowing correction. Repeated delivery of the same command
+message cannot create a second record; a new `/add` after saving is a new entry.
+
+| Type | Required fields |
+| --- | --- |
+| restaurant | name, location |
+| service | name, category (e.g. plumber), phone_number, location |
+| place | name, location, category |
+| event | event_name, event_date (YYYY-MM-DD), venue, total_tickets, price, category |
+| support_ticket | id (TKT-...), customer_phone, issue |
+| product | name, price, stock, category |
+| order | id (ORD-...), customer_phone |
+| order_item | order_id, product_id, quantity, unit_price |
+| occasion | name, occasion (birthday/anniversary), month, day, country, timezone, phone_number |
+
+Phone numbers include `+` and country code. Prices cannot be negative; quantities
+must be positive; stock cannot be negative; event sales cannot exceed capacity.
+Orders/products must exist before adding order items. Adding an item recalculates
+the order total from its items; it does not reserve stock or take payment. Events
+use the existing ticketed-event table. Occasion year is optional and timezone uses
+an IANA name. Optional/default fields are shown in the review. This workflow creates
+records; it does not edit already saved records or expose arbitrary SQL.
+
+Modules under `app/whatsapp/`: `messages.py` normalizes provider events, `api.py`
+authenticates and archives, `entries.py` defines field validation, `llm.py` extracts
+fields and summarizes, `store.py` handles drafts and inserts, and `worker.py`
+processes commands, schedules summaries, and sends the durable outbox.
+
+`whatsapp_entry_drafts`, `whatsapp_summary_runs`, and `whatsapp_outbox` track work.
+Outbox `sent` means provider acceptance. Failed, unknown or interrupted (`sending`)
+deliveries are not automatically retried, to avoid duplicate sends; inspect Shivay
+before manually reconciling them. Archive records remain until you remove them.
+
+Run offline tests with `python -m pytest -q`. The additional PostgreSQL workflow test
+runs only when `WHATSAPP_TEST_DATABASE_URL` is set; it creates and removes a uniquely
+named test schema and mocks all model calls and outbound sends.
