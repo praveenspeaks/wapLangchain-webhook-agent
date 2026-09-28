@@ -6,7 +6,14 @@ from psycopg import AsyncConnection, DataError, IntegrityError, sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from app.whatsapp.entries import ENTITIES, entity_name, review, validate_entry
+from app.whatsapp.entries import (
+    ENTITIES,
+    clean_fields,
+    command_text,
+    review,
+    split_add,
+    validate_entry,
+)
 from app.whatsapp.llm import WhatsAppLLM
 
 
@@ -52,7 +59,7 @@ async def save_record(conn: AsyncConnection, entity: str, data: dict[str, Any]) 
 
 
 HELP = (
-    "Use /add TYPE description or /add TYPE {JSON fields}. Types: "
+    'Use /add TYPE description (or just "add TYPE ...") or /add TYPE {JSON fields}. Types: '
     + ", ".join(ENTITIES)
     + ".\nUse /set with more details or corrected JSON fields, /draft to review, "
     "/save to create the record, or /cancel to discard it. Only your outgoing commands "
@@ -61,7 +68,7 @@ HELP = (
 
 
 async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: WhatsAppLLM) -> str:
-    command, _, arguments = text.strip().partition(" ")
+    command, _, arguments = (command_text(text) or text).strip().partition(" ")
     command = command.lower()
     if command == "/help":
         return HELP
@@ -75,8 +82,7 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
     if command == "/add":
         if draft:
             return "You already have a draft. Use /draft, /save or /cancel before /add."
-        entity, _, supplied = arguments.strip().partition(" ")
-        entity = entity_name(entity)
+        entity, supplied = split_add(arguments)
         if entity not in ENTITIES:
             return HELP
         try:
@@ -99,7 +105,7 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
         return "Draft cancelled. No business record was created."
     if command == "/set":
         try:
-            data = draft["data"] | await llm.extract(draft["entity"], arguments)
+            data = clean_fields(draft["data"] | await llm.extract(draft["entity"], arguments))
         except Exception:
             return "Could not read the correction. Use /set {JSON fields}. The draft is unchanged."
         await conn.execute(

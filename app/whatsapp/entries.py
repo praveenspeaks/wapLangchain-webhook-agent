@@ -1,9 +1,11 @@
 """Allowlisted data-entry schemas. Model output never becomes executable SQL."""
 
 import json
+import re
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any, Literal
+from zoneinfo import available_timezones
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -111,12 +113,82 @@ ALIASES = {
     "places": "place",
     "places_to_visit": "place",
     "occasions": "occasion",
+    # Common owner typos, and occasion kinds used as the type ("add birthday ...").
+    "occassion": "occasion",
+    "occassions": "occasion",
+    "ocassion": "occasion",
+    "ocasion": "occasion",
+    "occation": "occasion",
+    "birthday": "occasion",
+    "anniversary": "occasion",
+    "resturant": "restaurant",
+    "restaurent": "restaurant",
 }
+COMMANDS = {"/add", "/set", "/save", "/cancel", "/draft", "/help"}
 
 
 def entity_name(value: str) -> str:
     value = value.lower()
     return ALIASES.get(value, value)
+
+
+def clean_phone(value: str) -> str:
+    """'91 98765 43210' or '0091-9876543210' -> '+919876543210'; local numbers stay invalid."""
+    digits = re.sub(r"[\s().-]", "", value)
+    if digits.startswith("00"):
+        digits = "+" + digits[2:]
+    elif re.fullmatch(r"[1-9][0-9]{7,14}", digits):
+        digits = "+" + digits
+    return digits
+
+
+def clean_timezone(value: str) -> str:
+    """'london' or 'new york' -> the unique IANA zone with that city, else unchanged."""
+    city = value.strip().replace(" ", "_").lower()
+    zones = {zone.lower(): zone for zone in available_timezones()}
+    if city in zones:
+        return zones[city]
+    matches = [zone for key, zone in zones.items() if key.endswith("/" + city)]
+    return matches[0] if len(matches) == 1 else value
+
+
+def clean_fields(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize owner-typed values before validation; never invent missing ones."""
+    data = dict(data)
+    for field in ("phone_number", "customer_phone"):
+        if isinstance(data.get(field), str):
+            data[field] = clean_phone(data[field])
+    if isinstance(data.get("timezone"), str):
+        data["timezone"] = clean_timezone(data["timezone"])
+    if isinstance(data.get("country"), str):
+        data["country"] = data["country"].strip().upper()
+    return data
+
+
+def command_text(text: str) -> str | None:
+    """Canonical owner command, or None for ordinary messages.
+
+    Accepts slash commands and plain "add TYPE details" (e.g. "Add occasion
+    birthday of ..."), but only when TYPE is a known record type.
+    """
+    text = text.strip()
+    word, _, rest = text.partition(" ")
+    if word.lower() in COMMANDS:
+        return text
+    entity = rest.strip().split(" ", 1)[0].strip(",.:;")
+    if word.lower() == "add" and entity_name(entity) in ENTITIES:
+        return "/add " + rest.strip()
+    return None
+
+
+def split_add(arguments: str) -> tuple[str, str]:
+    """Split "/add" arguments into an entity and its details."""
+    word, _, supplied = arguments.strip().partition(" ")
+    word = word.strip(",.:;")
+    if word.lower() in ("birthday", "anniversary"):
+        # The occasion kind is itself a field value, so keep it in the details.
+        supplied = f"{word} {supplied}"
+    return entity_name(word), supplied
 
 
 def validate_entry(entity: str, data: dict[str, Any]) -> BaseModel:

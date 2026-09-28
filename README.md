@@ -442,49 +442,132 @@ summarization; stored message bodies are not shortened.
 
 ### Add records through your own WhatsApp messages
 
-Send commands from the connected owner account (the provider must report
-`fromMe=true`), preferably in your self-chat. Ordinary messages do not create
-records. The agent sends feedback privately to the configured owner number.
-Only one active draft is kept per instance, persisted across restarts.
+Only messages **you send** from the connected WhatsApp account (`fromMe=true`) can
+create records. Messages from anyone else are answered by the chat agent and can
+never add, change or remove data. Send commands in your "message yourself" chat
+(or any chat — the other person will see the command text). Feedback is sent
+privately to `WHATSAPP_OWNER_NUMBER`, starting with `[Agent]`.
 
-```text
-/add restaurant {"name":"The Olive Tree"}
+#### Setup
+
+The hub (or provider webhook) must forward your own outgoing messages to `/invoke`,
+`/webhook` or `/webhook/shivay`. If nothing appears in the log when you send a
+command, this forwarding is switched off. Then set, and restart:
+
+```env
+WHATSAPP_ENABLED=true
+WHATSAPP_DATA_ENTRY_ENABLED=true
+WHATSAPP_OWNER_NUMBER=+447700900123   # where feedback is sent (+ and country code)
+SHIVAY_INSTANCE_NAME=my-instance      # must match the event's "instance"
+SHIVAY_API_URL=https://...            # used to send the private feedback
+SHIVAY_API_KEY=...
 ```
 
-The agent asks for `location`. Supply it, inspect the returned draft, then save:
+#### Commands
+
+| Command | What it does |
+| --- | --- |
+| `add TYPE details` or `/add TYPE details` | Start a draft. Plain English or JSON. |
+| `/set details` | Add missing fields or correct values in the draft |
+| `/draft` | Show the current draft again |
+| `/save` | Validate and create the record; replies with its ID |
+| `/cancel` | Discard the draft; nothing is saved |
+| `/help` | List commands and record types |
+
+Only `add` works without the `/`, and only when followed by a known type, so a
+normal message such as "add me to the group" is ignored. Common typos are
+understood (`occassion`, `resturant`), and `add birthday …` / `add anniversary …`
+mean an occasion. One draft is open at a time: finish it with `/save` or `/cancel`
+before the next `add`. Drafts survive restarts.
+
+#### What each type requires
+
+| Type | Required | Optional |
+| --- | --- | --- |
+| `occasion` | name, occasion (birthday/anniversary), month, day, country (2 letters, e.g. IN, GB), timezone, phone_number | year, enabled (default true) |
+| `restaurant` | name, location | cuisine, phone_number, description |
+| `service` | name, category (e.g. plumber), phone_number, location | description |
+| `place` | name, location, category | description |
+| `event` | event_name, event_date (YYYY-MM-DD), venue, total_tickets, price, category | tickets_sold (default 0) |
+| `product` | name, price, stock, category | description |
+| `order` | id (`ORD-…`), customer_phone | status (default pending), total_amount |
+| `order_item` | order_id, product_id, quantity, unit_price | — |
+| `support_ticket` | id (`TKT-…`), customer_phone, issue | priority (default Normal), status (default Open) |
+
+Values are cleaned before checking: a city timezone such as `london` becomes
+`Europe/London`, `91 98765 43210` becomes `+919876543210`, and `gb` becomes `GB`.
+A phone number without a country code (e.g. `07700 900123`) is rejected, and you
+are asked to correct it. Missing fields are never guessed; the draft lists them.
+
+#### Examples
 
 ```text
-/set {"location":"Richmond, London","cuisine":"Mediterranean"}
+add occasion birthday of Asha Rao, 16 October, +91 98765 43210, country IN, timezone London
 /save
 ```
 
-Natural language also works: `/add service Sam, plumber, +447700900123, Richmond`.
-`/set` accepts additional details or JSON corrections. `/draft` shows the draft,
-`/cancel` discards it, and `/help` lists commands. JSON entry bypasses the LLM.
-Missing or invalid fields prevent saving. Corrections must be reviewed again.
-A successful `/save` returns the created record ID. Database constraint failures
-retain the draft, allowing correction. Repeated delivery of the same command
-message cannot create a second record; a new `/add` after saving is a new entry.
+```text
+add restaurant The Olive Tree
+/set location Richmond, London, cuisine Mediterranean
+/save
+```
 
-| Type | Required fields |
-| --- | --- |
-| restaurant | name, location |
-| service | name, category (e.g. plumber), phone_number, location |
-| place | name, location, category |
-| event | event_name, event_date (YYYY-MM-DD), venue, total_tickets, price, category |
-| support_ticket | id (TKT-...), customer_phone, issue |
-| product | name, price, stock, category |
-| order | id (ORD-...), customer_phone |
-| order_item | order_id, product_id, quantity, unit_price |
-| occasion | name, occasion (birthday/anniversary), month, day, country, timezone, phone_number |
+```text
+add service Sam, plumber, +447700900123, Richmond
+/save
+```
 
-Phone numbers include `+` and country code. Prices cannot be negative; quantities
-must be positive; stock cannot be negative; event sales cannot exceed capacity.
-Orders/products must exist before adding order items. Adding an item recalculates
-the order total from its items; it does not reserve stock or take payment. Events
-use the existing ticketed-event table. Occasion year is optional and timezone uses
-an IANA name. Optional/default fields are shown in the review. This workflow creates
-records; it does not edit already saved records or expose arbitrary SQL.
+```text
+add place Kew Gardens, Richmond, category park
+add event {"event_name":"Diwali Night","event_date":"2026-11-08","venue":"Town Hall","total_tickets":200,"price":15,"category":"festival"}
+```
+
+JSON after the type skips the model entirely. Each `/add` then needs `/save`.
+
+Other rules: prices and stock cannot be negative, quantities must be positive, and
+event sales cannot exceed capacity. Create the order and product before an order
+item; adding an item recalculates the order total (no stock reservation or payment).
+If a save hits a database rule (duplicate ID, missing order), the draft is kept so
+you can `/set` and retry. The same command delivered twice never creates two records.
+
+#### Disable or remove records
+
+WhatsApp commands only **add** records; they cannot edit, disable or delete saved
+ones (by design, so a mistyped message cannot destroy data).
+
+- **Pause or resume a greeting occasion** with the admin API
+  (requires `GREETINGS_ADMIN_API_KEY`). Find the ID with `GET /greetings/occasions`:
+
+  ```bash
+  curl -X PATCH https://<server>/greetings/occasions/<id>/enabled \
+    -H "X-Greetings-Key: $GREETINGS_ADMIN_API_KEY" \
+    -H "Content-Type: application/json" -d '{"enabled": false}'
+  ```
+
+  Prefer disabling over deleting: an occasion that has already been sent a
+  greeting cannot be deleted while its delivery history exists.
+  Fix a wrong timezone with `PATCH /greetings/occasions/<id>/timezone`.
+- **Remove any other record** directly in PostgreSQL, using the ID from `/save`:
+
+  | Type | Table |
+  | --- | --- |
+  | occasion | `greeting_occasions` |
+  | restaurant | `restaurants` |
+  | service | `services` |
+  | place | `places_to_visit` |
+  | event | `event_tickets` |
+  | product | `products` |
+  | order (and its items) | `orders` (items are removed with it) |
+  | order_item | `order_items` |
+  | support_ticket | `support_tickets` |
+
+  ```sql
+  DELETE FROM restaurants WHERE id = 12;
+  ```
+
+  A product used in an order item cannot be deleted until that item is removed.
+- **Turn off WhatsApp data entry** entirely with `WHATSAPP_DATA_ENTRY_ENABLED=false`
+  and restart. Your own messages are then ignored; incoming chats still get replies.
 
 Modules under `app/whatsapp/`: `messages.py` normalizes provider events, `api.py`
 authenticates and archives, `entries.py` defines field validation, `llm.py` extracts

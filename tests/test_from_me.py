@@ -57,3 +57,63 @@ def test_only_owner_commands_are_queued(text: str, entry_enabled: bool, queued: 
     with patch("app.whatsapp.api.settings") as settings:
         settings.whatsapp_data_entry_enabled = entry_enabled
         assert owner_command(owner_event(text)["data"]) is queued
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (
+            "Add occassion birthday of my friend Asha, 16th october",
+            "/add occassion birthday of my friend Asha, 16th october",
+        ),
+        ("add restaurant The Olive Tree, Richmond", "/add restaurant The Olive Tree, Richmond"),
+        ("add birthday of Sam on 3 May", "/add birthday of Sam on 3 May"),
+        ("/save", "/save"),
+        ("Add me to the group please", None),
+        ("add", None),
+        ("Hello", None),
+        ("[Agent]\n/add restaurant X", None),
+    ],
+)
+def test_plain_add_commands(text: str, expected: str | None) -> None:
+    from app.whatsapp.entries import command_text
+
+    assert command_text(text) == expected
+
+
+@pytest.mark.parametrize(
+    "arguments,entity,supplied",
+    [
+        ("occassion birthday of Anjani", "occasion", "birthday of Anjani"),
+        ("birthday of Sam on 3 May", "occasion", "birthday of Sam on 3 May"),
+        ("restaurant: The Olive Tree", "restaurant", "The Olive Tree"),
+    ],
+)
+def test_split_add(arguments: str, entity: str, supplied: str) -> None:
+    from app.whatsapp.entries import split_add
+
+    assert split_add(arguments) == (entity, supplied)
+
+
+def test_owner_typed_values_are_normalized() -> None:
+    from app.whatsapp.entries import clean_fields, validate_entry
+
+    data = clean_fields(
+        {
+            "name": "Asha Rao",
+            "occasion": "birthday",
+            "month": 10,
+            "day": 16,
+            "timezone": "London",
+            "phone_number": "91 9876543210",
+            "country": "gb",
+        }
+    )
+    assert data["timezone"] == "Europe/London"
+    assert data["phone_number"] == "+919876543210"
+    validate_entry("occasion", data)
+    assert clean_fields({"timezone": "new york"})["timezone"] == "America/New_York"
+    assert clean_fields({"timezone": "Asia/Kolkata"})["timezone"] == "Asia/Kolkata"
+    assert clean_fields({"phone_number": "0091-98765 43210"})["phone_number"] == "+919876543210"
+    # A local number has no country code; it stays invalid so the owner is asked.
+    assert clean_fields({"phone_number": "07700 900123"})["phone_number"] == "07700900123"

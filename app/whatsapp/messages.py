@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, SecretStr, StrictBool
 
+from app.whatsapp.entries import command_text
+
 
 class MessageKey(BaseModel):
     remoteJid: str = Field(min_length=1, max_length=200)
@@ -103,14 +105,7 @@ def normalize(data: WebhookMessage, owner_number: str) -> dict[str, Any] | None:
 
 
 def is_command(text: str) -> bool:
-    return text.strip().split(" ", 1)[0].lower() in {
-        "/add",
-        "/set",
-        "/save",
-        "/cancel",
-        "/draft",
-        "/help",
-    }
+    return command_text(text) is not None
 
 
 def chat_type(jid: str) -> str:
