@@ -63,6 +63,7 @@
                 "SHIVAY_API_KEY",
                 "SHIVAY_INSTANCE_NAME",
                 "SHIVAY_WEBHOOK_SECRET",
+                "WHATSAPP_REQUIRE_WEBHOOK_SECRET",
                 "WHATSAPP_DATA_ENTRY_ENABLED",
                 "WHATSAPP_ENABLED",
                 "WHATSAPP_OWNER_NUMBER",

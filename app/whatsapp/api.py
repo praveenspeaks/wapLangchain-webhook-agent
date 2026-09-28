@@ -21,18 +21,11 @@ async def shivay_webhook(
     expected = settings.shivay_webhook_secret.get_secret_value()
     if not settings.whatsapp_enabled:
         raise HTTPException(503, "WhatsApp capture is disabled")
-    if secret is not None:
-        authenticated = bool(expected) and secrets.compare_digest(
-            secret.encode(), expected.encode()
-        )
-    else:
-        supplied_key = payload.apikey.get_secret_value() if payload.apikey else ""
-        configured_key = settings.shivay_api_key.get_secret_value()
-        authenticated = bool(supplied_key and configured_key) and secrets.compare_digest(
-            supplied_key.encode(), configured_key.encode()
-        )
-    if not authenticated:
-        raise HTTPException(401, "Invalid webhook credentials")
+    # Provider API credentials are for outbound calls, never incoming authentication.
+    if settings.whatsapp_require_webhook_secret and (
+        not secret or not expected or not secrets.compare_digest(secret.encode(), expected.encode())
+    ):
+        raise HTTPException(401, "Invalid webhook secret")
     if payload.instance != settings.shivay_instance_name:
         raise HTTPException(403, "Unexpected WhatsApp instance")
     if payload.event.upper().replace(".", "_") != "MESSAGES_UPSERT":

@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     shivay_api_key: SecretStr = SecretStr("")
     shivay_instance_name: str = ""
     shivay_webhook_secret: SecretStr = SecretStr("")
+    whatsapp_require_webhook_secret: bool = False
     whatsapp_enabled: bool = False
     whatsapp_owner_number: str = ""
     whatsapp_data_entry_enabled: bool = False
@@ -76,17 +77,13 @@ class Settings(BaseSettings):
         outbound = self.whatsapp_data_entry_enabled or self.whatsapp_summaries_enabled
         if outbound and not self.whatsapp_enabled:
             raise ValueError("Enable WHATSAPP_ENABLED for data entry or summaries")
-        if self.whatsapp_enabled and (
-            not (
-                self.shivay_webhook_secret.get_secret_value()
-                or self.shivay_api_key.get_secret_value()
-            )
-            or not self.shivay_instance_name
+        if self.whatsapp_enabled and not self.shivay_instance_name.strip():
+            raise ValueError("WhatsApp capture requires SHIVAY_INSTANCE_NAME")
+        if (
+            self.whatsapp_require_webhook_secret
+            and not self.shivay_webhook_secret.get_secret_value()
         ):
-            raise ValueError(
-                "WhatsApp capture requires SHIVAY_INSTANCE_NAME and either "
-                "SHIVAY_WEBHOOK_SECRET or SHIVAY_API_KEY"
-            )
+            raise ValueError("SHIVAY_WEBHOOK_SECRET is required when webhook protection is enabled")
         if outbound and not re.fullmatch(r"\+[1-9][0-9]{7,14}", self.whatsapp_owner_number):
             raise ValueError("WHATSAPP_OWNER_NUMBER must include + and the country code")
         if self.greetings_enabled or outbound:

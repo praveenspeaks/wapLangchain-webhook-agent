@@ -1,4 +1,4 @@
-"""Native provider credentials and custom headers both authenticate webhook events."""
+"""Incoming provider API keys are ignored; secret protection is an explicit opt-in."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,17 +11,23 @@ from app.whatsapp.messages import WebhookEvent
 
 
 @pytest.mark.parametrize(
-    "key,header,expected",
+    "key,header,expected,protected",
     [
-        ("test", None, 200),
-        (None, "test-secret", 200),
-        (None, None, 401),
-        ("wrong", None, 401),
-        ("test", "wrong", 401),
+        ("test", None, 200, False),
+        (None, None, 200, False),
+        ("different-key", None, 200, False),
+        ("different-key", "wrong", 200, False),
+        (None, "test-secret", 200, True),
+        (None, None, 401, True),
+        ("test", "wrong", 401, True),
+        ("test", None, 401, True),
     ],
 )
-def test_real_hub_route_authentication(key: str | None, header: str | None, expected: int) -> None:
-    config = configuration()
+def test_real_hub_route_authentication(
+    key: str | None, header: str | None, expected: int, protected: bool
+) -> None:
+    config = configuration(whatsapp_require_webhook_secret=protected)
+    assert config.shivay_api_key.get_secret_value() == "test"
     body = payload()
     body.update({"sessionId": "auth-test", "message": "Hello"})
     body["data"]["message"] = {"conversation": "Hello"}
@@ -59,4 +65,6 @@ def test_payload_secret_not_serialized_and_key_only_config_allowed() -> None:
     event = WebhookEvent.model_validate(payload() | {"apikey": "example-private-key"})
     assert "example-private-key" not in repr(event)
     assert "apikey" not in event.model_dump()
-    assert configuration(shivay_webhook_secret="").whatsapp_enabled
+    assert configuration(
+        shivay_webhook_secret="", shivay_api_key="", whatsapp_require_webhook_secret=False
+    ).whatsapp_enabled

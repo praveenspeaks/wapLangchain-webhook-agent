@@ -22,6 +22,7 @@ def configuration(**changes: object) -> Settings:
             "postgres_url": "postgresql://localhost/test",
             "whatsapp_enabled": True,
             "shivay_webhook_secret": "test-secret",
+            "whatsapp_require_webhook_secret": True,
             "shivay_instance_name": "test",
             "whatsapp_owner_number": "+447700900123",
             "shivay_api_url": "https://example.com",

@@ -26,7 +26,7 @@ def test_rejected_payload_diagnostics() -> None:
         assert response.status_code == 401
         diagnostic = logger.info.call_args_list[1].kwargs["extra"]
         assert diagnostic["payload_apikey_present"] is True
-        assert diagnostic["payload_apikey_matches"] is False
+        assert diagnostic["payload_apikey_used"] is False
         assert diagnostic["webhook_secret_header_present"] is False
         assert diagnostic["payload"][0]["body"]["message"] == "Hello"
         for secret in ("wrong-private-key", "private-message-secret", "private-auth"):

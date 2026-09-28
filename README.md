@@ -288,11 +288,22 @@ fixed UTC schedule without holiday-calendar checks.
 
 ### Connection Hub integration
 
+Incoming webhook payload `apikey` values are ignored, never used to send messages,
+and never compared with the outbound `SHIVAY_API_KEY`. Receiving is open by default
+(`WHATSAPP_REQUIRE_WEBHOOK_SECRET=false`), so anyone who can reach the endpoint can
+submit events. For optional independent protection, set
+`WHATSAPP_REQUIRE_WEBHOOK_SECRET=true` and configure `SHIVAY_WEBHOOK_SECRET`; the
+sender must then provide the matching `X-Webhook-Secret` header. Existing secret
+values alone do not enable protection. `SHIVAY_WEBHOOK_API_KEY` is no longer used.
+`SHIVAY_API_URL`, `SHIVAY_API_KEY` and `SHIVAY_INSTANCE_NAME` configure outbound
+scheduler/command sends. Greetings use recipient numbers; summaries use
+`WHATSAPP_OWNER_NUMBER`, through the configured instance.
+
 For temporary payload diagnostics, set `WEBHOOK_LOG_PAYLOADS=true` and
 `LOG_LEVEL=INFO` in the deployment and restart. `Webhook payload diagnostic` logs
 include JSON bodies (including rejected requests), with credential fields, nested
 headers/query objects and URLs redacted. Message text and phone numbers remain visible.
-The fields `payload_apikey_present`, `payload_apikey_matches`,
+The fields `payload_apikey_present`, `payload_apikey_used` (always false), `webhook_auth_required`,
 `webhook_secret_header_present` and `webhook_secret_header_matches` diagnose
 authentication without revealing secret values. The request ID links these entries
 to outcome logs. Invalid JSON and bodies over 64 KiB are omitted from payload logs.
@@ -319,8 +330,7 @@ Configure the hub to forward this `response` to the originating WhatsApp chat.
 Skip sending when `response` is empty: outgoing `fromMe` events, unsupported event
 types and messages without text/captions do not trigger automatic chat replies.
 The hub handles WhatsApp delivery; the agent does not call a URL from the payload
-or use its `apikey` for outbound requests. With archiving enabled, the body `apikey`
-can authenticate the event against the configured `SHIVAY_API_KEY`.
+or use its `apikey` for authentication or outbound requests.
 Provider credentials and transport metadata are not sent to
 the model. JSON must contain actual URLs/JIDs, not Markdown links copied from chat.
 
@@ -329,12 +339,7 @@ For simple hub request/reply use, no `SHIVAY_*` values are required; keep
 and `GREETINGS_ENABLED` false. These switches control the archive/background
 features, not the `/webhook` chat endpoint.
 
-For archiving and scheduled summaries, enable/configure the features below and
-authenticate with either a body `apikey` matching `SHIVAY_API_KEY` or the actual
-HTTP header `X-Webhook-Secret` matching `SHIVAY_WEBHOOK_SECRET`. A supplied incorrect
-header is rejected even if the body key matches. The JSON wrapper's
-`headers` object does not authenticate a request. The event instance must match
-`SHIVAY_INSTANCE_NAME`. Hub events are then archived before processing; duplicate
+For archiving and scheduled summaries, enable/configure the features below. No incoming API key is required. Optional header protection applies only when explicitly enabled. The event instance must match `SHIVAY_INSTANCE_NAME`. Hub events are then archived before processing; duplicate
 events return an empty response. Outgoing owner `/add` commands are archived for
 the existing worker, which sends its replies privately, so the hub must not send
 an additional reply. Do not forward the same event to both webhook endpoints.
@@ -386,11 +391,7 @@ To enable:
    Features default to disabled until configured. Restart after configuration changes.
 3. Configure Shivay to forward `messages.upsert` / `MESSAGES_UPSERT` events to
    `https://YOUR_HOST/webhook/shivay`, including incoming group/direct messages and
-   outgoing `fromMe` messages. The payload's `apikey` must match the configured
-   `SHIVAY_API_KEY`, or configure the custom header `X-Webhook-Secret` to match
-   `SHIVAY_WEBHOOK_SECRET`. The latter can be empty when using body-key authentication.
-   The instance name is checked in either case. Credentials are excluded from
-   archived messages and model input. Verify its payload matches the example below.
+   outgoing `fromMe` messages. Incoming API keys are ignored and excluded from archived messages and model input. If optional webhook protection is enabled, send the configured `X-Webhook-Secret` header. Verify its payload matches the example below.
 4. Keep the application running continuously for timers and command processing.
 
 Accepted event shape (the `data` field can also be a list):

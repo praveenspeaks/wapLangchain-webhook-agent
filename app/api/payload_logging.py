@@ -49,6 +49,7 @@ async def payload_diagnostics(request: Request) -> dict[str, Any]:
     expected = settings.shivay_webhook_secret.get_secret_value()
     result: dict[str, Any] = {
         "body_bytes": len(body),
+        "webhook_auth_required": settings.whatsapp_require_webhook_secret,
         "webhook_secret_header_present": header is not None,
         "webhook_secret_header_matches": bool(header and expected)
         and secrets.compare_digest((header or "").encode(), expected.encode()),
@@ -64,11 +65,6 @@ async def payload_diagnostics(request: Request) -> dict[str, Any]:
     if isinstance(event, dict) and "body" in event:
         event = event["body"]
     api_key = event.get("apikey") if isinstance(event, dict) else None
-    configured = settings.shivay_api_key.get_secret_value()
     result["payload_apikey_present"] = api_key is not None
-    result["payload_apikey_matches"] = (
-        isinstance(api_key, str)
-        and bool(api_key and configured)
-        and secrets.compare_digest(api_key.encode(), configured.encode())
-    )
+    result["payload_apikey_used"] = False
     return result
