@@ -33,7 +33,8 @@ async def agent_webhook(request: Request) -> InvokeResponse:
     event: WebhookEvent | None = None
     if (
         settings.whatsapp_enabled
-        and kind == "text"
+        # Outgoing photos can carry a birthday wish in their caption.
+        and (kind == "text" or from_me)
         and raw.get("event") in ("messages.upsert", "MESSAGES_UPSERT")
     ):
         try:
@@ -45,7 +46,11 @@ async def agent_webhook(request: Request) -> InvokeResponse:
         stored = await shivay_webhook(event, request.headers.get("X-Webhook-Secret"))
         if from_me:
             request.state.webhook_outcome = (
-                "owner_command_queued" if stored["stored"] else "ignored_from_me"
+                "owner_command_queued"
+                if stored["stored"]
+                else "occasion_wish_captured"
+                if stored.get("captured")
+                else "ignored_from_me"
             )
             return InvokeResponse(response="")
     if from_me:

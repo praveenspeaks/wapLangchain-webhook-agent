@@ -46,6 +46,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if settings.whatsapp_enabled:
             async with get_pool().connection() as conn:
                 await conn.execute("SELECT id FROM whatsapp_messages LIMIT 0")
+                if settings.whatsapp_birthday_capture_enabled:
+                    # Fail startup clearly if migration 004 has not been applied.
+                    await conn.execute("SELECT id FROM whatsapp_occasion_candidates LIMIT 0")
             if outbound:
                 assert sender is not None
                 worker = WhatsAppWorker(settings, sender, WhatsAppLLM(settings))

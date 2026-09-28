@@ -126,7 +126,7 @@ ALIASES = {
     "resturant": "restaurant",
     "restaurent": "restaurant",
 }
-COMMANDS = {"/add", "/set", "/save", "/cancel", "/draft", "/help"}
+COMMANDS = {"/add", "/set", "/save", "/cancel", "/draft", "/help", "/birthdays", "/dismiss"}
 
 
 def entity_name(value: str) -> str:
@@ -237,6 +237,8 @@ HELP = (
     "/save - create the record\n"
     "/cancel - discard the draft\n"
     "/help TYPE - fields and an example for one type\n"
+    "/birthdays - birthday/anniversary wishes you sent, captured to add\n"
+    "add birthday N - draft captured wish N; /dismiss N - remove it from the list\n"
     "In your message-yourself chat the / is optional; in other chats only add works "
     "without it.\n\n"
     "Types: " + ", ".join(ENTITIES) + " (birthday and anniversary mean occasion)."

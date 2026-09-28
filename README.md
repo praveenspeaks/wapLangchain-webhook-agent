@@ -474,6 +474,8 @@ SHIVAY_API_KEY=...
 | `/cancel` | Discard the draft; nothing is saved |
 | `/help` | List all commands and record types |
 | `/help TYPE` | Required and optional fields plus an example for one type, e.g. `/help birthday`, `/help place` |
+| `/birthdays` | List captured birthday/anniversary wishes (see below) |
+| `add birthday N` / `/dismiss N` | Draft captured wish N, or remove it from the list |
 
 In your "message yourself" chat, every command works without the `/` (`save`,
 `cancel`, `draft`, `help place`, `set country GB`). In any other chat only `add`
@@ -536,6 +538,39 @@ event sales cannot exceed capacity. Create the order and product before an order
 item; adding an item recalculates the order total (no stock reservation or payment).
 If a save hits a database rule (duplicate ID, missing order), the draft is kept so
 you can `/set` and retry. The same command delivered twice never creates two records.
+
+#### Capture birthdays from wishes you send
+
+With `WHATSAPP_BIRTHDAY_CAPTURE_ENABLED=true` (needs `WHATSAPP_DATA_ENTRY_ENABLED`),
+every birthday or anniversary wish **you send** is saved as a candidate: "Happy
+birthday", "HBD", "Many happy returns", "Happy anniversary", "Janamdin …",
+"जन्मदिन", including photo captions. Nothing is added to `greeting_occasions`
+until you add and save it. Wishes you receive, and your "message yourself" chat,
+are not captured. Apply the migrations first (`python -m app.greetings.migrate`
+creates `whatsapp_occasion_candidates`).
+
+| Where you wished | Who it is for |
+| --- | --- |
+| Personal chat | That chat's phone number |
+| Group, `Happy birthday @Rahul` | The mentioned person |
+| Group, replying to their message | The author of the message you replied to |
+| Group, no mention or reply | Unknown; saved with the date for you to complete |
+
+The date you sent it (in `WHATSAPP_SUMMARY_TIMEZONE`) becomes the month and day,
+a name straight after the wish ("HBD Rahul") becomes the name, and a +91/+44/+971
+(and other single-timezone) number fills in country and timezone. "Belated" wishes
+are flagged because the real date is earlier. Private `@lid` contacts have no
+phone number, so you add it with `set`.
+
+```text
+birthdays          → #7 birthday 28 Sep · Rahul · +919876543210 · personal chat
+add birthday 7     → draft with the captured details
+save               → stored in greeting_occasions (or set … first)
+dismiss 7          → remove a wish you don't want to keep
+```
+
+Only wishes sent after the feature is switched on are seen; old chats are not
+searched.
 
 #### Disable or remove records
 

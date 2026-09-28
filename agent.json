@@ -65,6 +65,7 @@
                 "SHIVAY_WEBHOOK_SECRET",
                 "WHATSAPP_REQUIRE_WEBHOOK_SECRET",
                 "WHATSAPP_DATA_ENTRY_ENABLED",
+                "WHATSAPP_BIRTHDAY_CAPTURE_ENABLED",
                 "WHATSAPP_ENABLED",
                 "WHATSAPP_OWNER_NUMBER",
                 "WHATSAPP_SUMMARIES_ENABLED",
