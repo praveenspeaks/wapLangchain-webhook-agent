@@ -63,7 +63,17 @@ class WhatsAppWorker:
                 message = await cur.fetchone()
             if not message:
                 return
-            response = await command_reply(conn, self.instance, message["body"], self.llm)
+            try:
+                # Savepoint: a failed command rolls back its own writes but is still
+                # marked done below, so it cannot block every later command.
+                async with conn.transaction():
+                    response = await command_reply(conn, self.instance, message["body"], self.llm)
+            except Exception:
+                logger.exception("WhatsApp command failed", extra={"message_id": message["id"]})
+                response = (
+                    "Sorry, that command failed with an internal error and nothing was saved. "
+                    "Send /draft to check your draft, or /cancel to start again."
+                )
             await queue_reply(
                 conn,
                 self.instance,
@@ -198,7 +208,9 @@ class WhatsAppWorker:
                         await task()
                     except Exception as exc:
                         logger.error(
-                            "WhatsApp worker step failed", extra={"error_type": type(exc).__name__}
+                            "WhatsApp worker step failed",
+                            extra={"step": task.__name__, "error_type": type(exc).__name__},
+                            exc_info=True,
                         )
             await asyncio.sleep(5)
 

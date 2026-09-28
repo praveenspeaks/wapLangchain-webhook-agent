@@ -145,3 +145,37 @@ async def test_help_command_needs_no_draft_lookup() -> None:
     reply = await command_reply(conn, "test", "/help place", MagicMock())
     assert reply.startswith("place")
     conn.cursor.assert_not_called()
+
+
+async def test_failing_command_is_answered_and_does_not_block_queue() -> None:
+    from unittest.mock import MagicMock
+
+    from app.whatsapp.worker import WhatsAppWorker
+
+    def context(value: object = None) -> MagicMock:
+        manager = MagicMock()
+        manager.__aenter__ = AsyncMock(return_value=value)
+        manager.__aexit__ = AsyncMock(return_value=False)
+        return manager
+
+    cur = MagicMock()
+    cur.execute = AsyncMock()
+    cur.fetchone = AsyncMock(return_value={"id": 5, "body": "/save"})
+    lock = MagicMock()
+    lock.fetchone = AsyncMock(return_value=(True,))
+    conn = MagicMock()
+    conn.execute = AsyncMock(return_value=lock)
+    conn.cursor.return_value = context(cur)
+    conn.transaction.return_value = context()
+    pool = MagicMock()
+    pool.connection.return_value = context(conn)
+    config = MagicMock(shivay_instance_name="test", whatsapp_owner_number="+447700900123")
+    with (
+        patch("app.whatsapp.worker.get_pool", return_value=pool),
+        patch("app.whatsapp.worker.command_reply", new=AsyncMock(side_effect=KeyError("x"))),
+        patch("app.whatsapp.worker.queue_reply", new_callable=AsyncMock) as queue,
+    ):
+        await WhatsAppWorker(config, MagicMock(), MagicMock()).process_command()
+    assert "internal error" in queue.call_args.args[4]
+    done = conn.execute.call_args_list[-1].args
+    assert "command_status = 'done'" in done[0] and done[1] == (5,)
