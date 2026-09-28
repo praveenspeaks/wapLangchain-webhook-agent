@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, StrictBool
+from pydantic import BaseModel, Field, SecretStr, StrictBool
 
 
 class MessageKey(BaseModel):
@@ -25,6 +25,7 @@ class WebhookEvent(BaseModel):
     event: str
     instance: str = Field(min_length=1, max_length=200)
     data: dict[str, Any] | list[dict[str, Any]]
+    apikey: SecretStr | None = Field(default=None, exclude=True, repr=False)
 
 
 def content(message: dict[str, Any]) -> tuple[str, str]:

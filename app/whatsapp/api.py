@@ -19,10 +19,20 @@ async def shivay_webhook(
     secret: Annotated[str | None, Header(alias="X-Webhook-Secret")] = None,
 ) -> dict[str, int | str]:
     expected = settings.shivay_webhook_secret.get_secret_value()
-    if not settings.whatsapp_enabled or not expected:
+    if not settings.whatsapp_enabled:
         raise HTTPException(503, "WhatsApp capture is disabled")
-    if secret is None or not secrets.compare_digest(secret.encode(), expected.encode()):
-        raise HTTPException(401, "Invalid webhook secret")
+    if secret is not None:
+        authenticated = bool(expected) and secrets.compare_digest(
+            secret.encode(), expected.encode()
+        )
+    else:
+        supplied_key = payload.apikey.get_secret_value() if payload.apikey else ""
+        configured_key = settings.shivay_api_key.get_secret_value()
+        authenticated = bool(supplied_key and configured_key) and secrets.compare_digest(
+            supplied_key.encode(), configured_key.encode()
+        )
+    if not authenticated:
+        raise HTTPException(401, "Invalid webhook credentials")
     if payload.instance != settings.shivay_instance_name:
         raise HTTPException(403, "Unexpected WhatsApp instance")
     if payload.event.upper().replace(".", "_") != "MESSAGES_UPSERT":

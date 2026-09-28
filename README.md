@@ -309,7 +309,9 @@ Configure the hub to forward this `response` to the originating WhatsApp chat.
 Skip sending when `response` is empty: outgoing `fromMe` events, unsupported event
 types and messages without text/captions do not trigger automatic chat replies.
 The hub handles WhatsApp delivery; the agent does not call a URL from the payload
-or use its `apikey`. Provider credentials and transport metadata are not sent to
+or use its `apikey` for outbound requests. With archiving enabled, the body `apikey`
+can authenticate the event against the configured `SHIVAY_API_KEY`.
+Provider credentials and transport metadata are not sent to
 the model. JSON must contain actual URLs/JIDs, not Markdown links copied from chat.
 
 For simple hub request/reply use, no `SHIVAY_*` values are required; keep
@@ -318,7 +320,9 @@ and `GREETINGS_ENABLED` false. These switches control the archive/background
 features, not the `/webhook` chat endpoint.
 
 For archiving and scheduled summaries, enable/configure the features below and
-have the hub attach the actual HTTP header `X-Webhook-Secret`. The JSON wrapper's
+authenticate with either a body `apikey` matching `SHIVAY_API_KEY` or the actual
+HTTP header `X-Webhook-Secret` matching `SHIVAY_WEBHOOK_SECRET`. A supplied incorrect
+header is rejected even if the body key matches. The JSON wrapper's
 `headers` object does not authenticate a request. The event instance must match
 `SHIVAY_INSTANCE_NAME`. Hub events are then archived before processing; duplicate
 events return an empty response. Outgoing owner `/add` commands are archived for
@@ -372,11 +376,11 @@ To enable:
    Features default to disabled until configured. Restart after configuration changes.
 3. Configure Shivay to forward `messages.upsert` / `MESSAGES_UPSERT` events to
    `https://YOUR_HOST/webhook/shivay`, including incoming group/direct messages and
-   outgoing `fromMe` messages. Configure the custom header `X-Webhook-Secret` with
-   the same secret. The endpoint checks both this header and the instance name;
-   an API key inside the event body is not accepted as webhook authentication.
-   If your Shivay installation cannot attach custom headers, its adapter/proxy
-   must provide this header. Verify its event payload matches the example below.
+   outgoing `fromMe` messages. The payload's `apikey` must match the configured
+   `SHIVAY_API_KEY`, or configure the custom header `X-Webhook-Secret` to match
+   `SHIVAY_WEBHOOK_SECRET`. The latter can be empty when using body-key authentication.
+   The instance name is checked in either case. Credentials are excluded from
+   archived messages and model input. Verify its payload matches the example below.
 4. Keep the application running continuously for timers and command processing.
 
 Accepted event shape (the `data` field can also be a list):

@@ -92,7 +92,7 @@ def test_required_fields_and_database_constraints() -> None:
         {"whatsapp_enabled": False, "whatsapp_data_entry_enabled": True},
         {"whatsapp_summary_timezone": "London"},
         {"whatsapp_summary_time": "25:00"},
-        {"shivay_webhook_secret": ""},
+        {"shivay_webhook_secret": "", "shivay_api_key": ""},
     ],
 )
 def test_invalid_settings_fail_at_startup(changes: dict) -> None:
