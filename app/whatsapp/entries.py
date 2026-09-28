@@ -127,7 +127,16 @@ ALIASES = {
     "resturant": "restaurant",
     "restaurent": "restaurant",
 }
-COMMANDS = {"/add", "/set", "/save", "/cancel", "/draft", "/help", "/birthdays", "/dismiss"}
+COMMANDS = {
+    "/add", "/set", "/save", "/cancel", "/draft", "/help", "/birthdays", "/dismiss", "/upcoming",
+}  # fmt: skip
+# Natural questions in the owner's self-chat: "next upcoming birthday", "upcoming
+# 10 birthdays", "when is the next anniversary?", "show me next birthdays".
+UPCOMING = re.compile(
+    r"(?:(?:show|list|tell)\s+(?:me\s+)?|when(?:'s|\s+is)\s+|who(?:'s|\s+is|\s+has)\s+"
+    r"|what\s+are\s+)?(?:the\s+|my\s+)?(?:next|upcoming)\b\s*(.*)",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def entity_name(value: str) -> str:
@@ -230,6 +239,8 @@ def command_text(text: str, self_chat: bool = False) -> str | None:
     plain = word.lower().rstrip(".!")
     if self_chat and "/" + plain in COMMANDS - {"/add"}:
         return ("/" + plain + " " + rest.strip()).strip()
+    if self_chat and (question := UPCOMING.fullmatch(text)):
+        return ("/upcoming " + question.group(1).strip()).strip()
     entity = rest.strip().split(" ", 1)[0].strip(",.:;")
     if word.lower() == "add" and entity_name(entity) in ENTITIES:
         return "/add " + rest.strip()
@@ -269,6 +280,7 @@ HELP = (
     "/save - create the record\n"
     "/cancel - discard the draft\n"
     "/help TYPE - fields and an example for one type\n"
+    "/upcoming [N|all] [birthday|anniversary] - next saved occasions by date\n"
     "/birthdays - birthday/anniversary wishes you sent, captured to add\n"
     "add birthday N - draft captured wish N; /dismiss N - remove it from the list\n"
     "In your message-yourself chat the / is optional; in other chats only add works "

@@ -1,15 +1,14 @@
 """Greeting chat tool must validate before writing and never create tickets."""
 
 import json
-import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
 from psycopg.errors import UniqueViolation
 
 from app.agent.graph import build_graph
+from app.agent.greeting_flow import PRIVATE_REPLY
 from app.agent.service import process_message
 from app.tools.greetings import add_greeting_occasion
 
@@ -62,77 +61,19 @@ async def test_optional_year_and_duplicate_handling() -> None:
 
 
 @pytest.mark.asyncio
-async def test_graph_collects_details_across_turns_then_saves() -> None:
+async def test_public_chat_cannot_add_occasions() -> None:
+    """Adding occasions is owner-only (WhatsApp commands); the chat agent refuses."""
     model = AsyncMock()
-    model.ainvoke.side_effect = [
-        AIMessage(
-            content="",
-            tool_calls=[{"name": "add_greeting_occasion", "args": PARTIAL, "id": "first"}],
-        ),
-        AIMessage(
-            content="",
-            tool_calls=[{"name": "add_greeting_occasion", "args": COMPLETE, "id": "second"}],
-        ),
-    ]
     with (
         patch("app.agent.graph._build_llm", return_value=model),
         patch("app.tools.greetings.GreetingRepository") as repository,
-        patch("app.tools.support.get_pool") as support_pool,
     ):
-        create = repository.return_value.create = AsyncMock(return_value={"id": 42})
         graph = build_graph(MemorySaver())
         reply = await process_message(
             graph=graph,
             session_id="birthday-test",
             text="my friend Anjani Kumar Singh has birthday on 16th October, can you add",
         )
-        create.assert_not_awaited()
-        assert "country" in reply and "timezone" in reply and "WhatsApp number" in reply
-        assert "instance" not in reply
-        await process_message(
-            graph=graph, session_id="birthday-test", text="+447700900123, UK, London time"
-        )
-        create.assert_awaited_once()
-        support_pool.assert_not_called()
-        snapshot = await graph.aget_state({"configurable": {"thread_id": "birthday-test"}})
-        tool_results = [m for m in snapshot.values["messages"] if isinstance(m, ToolMessage)]
-        assert [json.loads(m.content)["status"] for m in tool_results] == [
-            "needs_details",
-            "created",
-        ]
-        assert model.ainvoke.await_count == 2  # No model rewrite of validated outcomes.
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(os.getenv("RUN_LIVE_GROQ_TEST") != "1", reason="Opt-in live model check")
-async def test_live_model_asks_only_for_missing_recipient_details() -> None:
-    """Exercise the actual model decision; all database writes are forbidden."""
-    with (
-        patch("app.tools.greetings.GreetingRepository") as repository,
-        patch(
-            "app.tools.support.get_pool", side_effect=AssertionError("No support ticket")
-        ) as support,
-    ):
-        graph = build_graph(MemorySaver())
-        reply = await process_message(
-            graph=graph,
-            session_id="live-greeting-intent",
-            text="This is a synthetic test: my fictional friend Example Person has birthday "
-            "on 16th October, "
-            "i want the greet him on that day",
-        )
-        snapshot = await graph.aget_state({"configurable": {"thread_id": "live-greeting-intent"}})
-        results = [m for m in snapshot.values["messages"] if isinstance(m, ToolMessage)]
-        assert results and all(m.name == "add_greeting_occasion" for m in results)
-        result = json.loads(results[-1].content)
-        assert result["status"] == "needs_details"
-        assert {issue["field"] for issue in result["issues"]} == {
-            "country",
-            "timezone",
-            "phone_number",
-        }
-        assert "instance" not in reply.lower()
-        assert "api key" not in reply.lower()
-        repository.assert_not_called()
-        support.assert_not_called()
-        print(reply)
+    assert reply == PRIVATE_REPLY
+    model.ainvoke.assert_not_awaited()
+    repository.assert_not_called()

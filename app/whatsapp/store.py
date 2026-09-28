@@ -3,13 +3,16 @@
 import asyncio
 import calendar
 import re
+from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from psycopg import AsyncConnection, DataError, IntegrityError, sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
+from app.config import settings
 from app.whatsapp.entries import (
     ENTITIES,
     clean_fields,
@@ -135,6 +138,62 @@ async def candidate_draft(
     return clean_fields(data, "occasion")
 
 
+def next_date(month: int, day: int, today: date) -> date:
+    """The next time this month/day comes round, today included (29 Feb -> 28 Feb)."""
+    for year in (today.year, today.year + 1):
+        try:
+            candidate = date(year, month, day)
+        except ValueError:
+            candidate = date(year, month, 28)  # 29 February outside a leap year.
+        if candidate >= today:
+            return candidate
+    raise AssertionError("A month/day always recurs within a year")
+
+
+async def upcoming(conn: AsyncConnection, arguments: str, today: date) -> str:
+    """Saved occasions ordered by their next date: the next 5 by default, or "all"."""
+    words = re.findall(r"[a-z]+|\d+", arguments.lower())
+    show_all = "all" in words
+    count = next((int(word) for word in words if word.isdigit()), 5)
+    kind = next(
+        (
+            "anniversary" if word.startswith("anniversar") else "birthday"
+            for word in words
+            if word.startswith(("birthday", "bday", "anniversar"))
+        ),
+        None,
+    )
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT name, occasion, month, day, phone_number FROM greeting_occasions "
+            "WHERE enabled AND (%s::text IS NULL OR occasion = %s)",
+            (kind, kind),
+        )
+        rows = list(await cur.fetchall())
+    label = f"{kind or 'occasion'}s" if kind != "anniversary" else "anniversaries"
+    if not rows:
+        return f"No saved {label} yet. Add them with: add occasion …"
+    dated = sorted(
+        ((next_date(row["month"], row["day"], today), row) for row in rows),
+        key=lambda pair: (pair[0], pair[1]["name"].lower()),
+    )
+    shown = dated if show_all else dated[: max(count, 1)]
+    lines = []
+    for number, (when, row) in enumerate(shown, 1):
+        days = (when - today).days
+        relative = "today" if days == 0 else "tomorrow" if days == 1 else f"in {days} days"
+        what = "" if kind else f" {row['occasion']}"
+        lines.append(
+            f"{number}. {row['name']}{what} — {when:%a} {when.day} {when:%b} ({relative})"
+            f" · {row['phone_number']}"
+        )
+    title = f"All {len(dated)} {label}" if show_all else f"Next {len(shown)} {label}"
+    reply = f"{title} (today {today:%a} {today.day} {today:%b}):\n" + "\n".join(lines)
+    if len(shown) < len(dated):
+        reply += f"\n\nSend upcoming all to see all {len(dated)}."
+    return reply
+
+
 BATCH = "batch:"  # Draft entity prefix for a list of records sent in one message.
 MAX_BATCH = 25
 
@@ -243,6 +302,9 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
         return help_text(arguments)
     if command == "/birthdays":
         return await list_candidates(conn, instance)
+    if command == "/upcoming":
+        local = datetime.now(UTC).astimezone(ZoneInfo(settings.whatsapp_summary_timezone))
+        return await upcoming(conn, arguments, local.date())
     if command == "/dismiss":
         return await dismiss_candidate(conn, instance, arguments)
     async with conn.cursor(row_factory=dict_row) as cur:

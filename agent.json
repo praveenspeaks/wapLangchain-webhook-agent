@@ -12,7 +12,6 @@
     "framework":  "langgraph",
     "llm":  "groq/openai/gpt-oss-120b",
     "tools":  [
-                  "add_greeting_occasion",
                   "get_order_status",
                   "get_orders_by_status",
                   "search_product",

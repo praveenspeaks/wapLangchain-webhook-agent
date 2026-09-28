@@ -368,17 +368,23 @@ outside the hub's request/response cycle. `GREETINGS_ADMIN_API_KEY` is only for
 the greetings management API. The direct `/webhook/shivay` endpoint remains
 available as a capture-only adapter; it does not return a chat answer.
 
-The main chat endpoint (`/invoke`, including deployment Quick Test) also supports
-natural-language birthday and anniversary entry. For example, "My friend Anjani
-Kumar Singh has birthday on 16th October, can you add" collects the name and date,
-then asks for the recipient's international phone number, country and timezone.
-The original year is optional. Send follow-up answers with the **same sessionId**
-so conversation memory retains the earlier details. Once all required fields are
-valid, the agent saves to `greeting_occasions`; missing details do not create a
-support ticket. It confirms saving only after the database tool succeeds and
-reports if automatic greeting delivery is disabled. Restart/redeploy to load the
-new tool and prompt. The owner-only WhatsApp `/add` → `/save` workflow below is
-unchanged.
+### Who can see what
+
+The chat agent (`/invoke`, `/webhook`) answers **anyone** who messages the business,
+so it only has public business tools: orders, products, events, support tickets
+and opening hours. It has no tool for private data, and questions about birthdays,
+anniversaries or greetings get a fixed "that information is private" reply before
+any model call, so it cannot be talked into reciting them, even from earlier in the
+same chat.
+
+Private to the owner: greeting occasions, captured wishes, the daily summary and
+the message archive. Reach them only with owner commands in your own WhatsApp
+"message yourself" chat (`add occasion …`, `upcoming`, `birthdays`, below) or the
+key-protected `/greetings` admin API. Their replies are always sent privately to
+`WHATSAPP_OWNER_NUMBER`, never in the webhook response, so even a forged webhook
+request cannot read them. To also stop forged requests from *queuing* owner
+commands, set `WHATSAPP_REQUIRE_WEBHOOK_SECRET=true` and have the hub send the
+`X-Webhook-Secret` header.
 
 The Shivay webhook `POST /webhook/shivay` stores group and direct messages in
 `whatsapp_messages`. It records text/captions, sender, chat, time and `fromMe`;
@@ -493,6 +499,7 @@ SHIVAY_API_KEY=...
 | `/cancel` | Discard the draft; nothing is saved |
 | `/help` | List all commands and record types |
 | `/help TYPE` | Required and optional fields plus an example for one type, e.g. `/help birthday`, `/help place` |
+| `upcoming` / `upcoming 10` / `upcoming all` / `upcoming anniversaries` | Saved occasions in order of their next date from today (next 5 by default). In your self-chat, questions like "next upcoming birthday" or "when is the next anniversary?" also work |
 | `/birthdays` | List captured birthday/anniversary wishes (see below) |
 | `add birthday N` / `/dismiss N` | Draft captured wish N, or remove it from the list |
 
