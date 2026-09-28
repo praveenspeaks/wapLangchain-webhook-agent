@@ -10,6 +10,7 @@ from app.whatsapp.entries import (
     ENTITIES,
     clean_fields,
     command_text,
+    help_text,
     review,
     split_add,
     validate_entry,
@@ -58,20 +59,11 @@ async def save_record(conn: AsyncConnection, entity: str, data: dict[str, Any]) 
     return str(result[0])
 
 
-HELP = (
-    'Use /add TYPE description (or just "add TYPE ...") or /add TYPE {JSON fields}. Types: '
-    + ", ".join(ENTITIES)
-    + ".\nUse /set with more details or corrected JSON fields, /draft to review, "
-    "/save to create the record, or /cancel to discard it. Only your outgoing commands "
-    "are accepted. Feedback is private to your configured number."
-)
-
-
 async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: WhatsAppLLM) -> str:
     command, _, arguments = (command_text(text) or text).strip().partition(" ")
     command = command.lower()
     if command == "/help":
-        return HELP
+        return help_text(arguments)
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT * FROM whatsapp_entry_drafts "
@@ -84,7 +76,7 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
             return "You already have a draft. Use /draft, /save or /cancel before /add."
         entity, supplied = split_add(arguments)
         if entity not in ENTITIES:
-            return HELP
+            return help_text(entity or " ")
         try:
             data = await llm.extract(entity, supplied)
         except Exception:

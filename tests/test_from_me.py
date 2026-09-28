@@ -117,3 +117,31 @@ def test_owner_typed_values_are_normalized() -> None:
     assert clean_fields({"phone_number": "0091-98765 43210"})["phone_number"] == "+919876543210"
     # A local number has no country code; it stays invalid so the owner is asked.
     assert clean_fields({"phone_number": "07700 900123"})["phone_number"] == "07700900123"
+
+
+def test_help_lists_commands_and_type_specific_fields() -> None:
+    from app.whatsapp.entries import ENTITIES, EXAMPLES, help_text
+
+    assert set(EXAMPLES) == set(ENTITIES)
+    general = help_text()
+    assert "/save" in general and "/help TYPE" in general and "restaurant" in general
+    birthday = help_text("birthday")
+    assert birthday.startswith("occasion")
+    assert "Required: " in birthday and "timezone" in birthday and "country" in birthday
+    assert "Optional: " in birthday and "year" in birthday
+    place = help_text("place")
+    assert "Required: name, location, category" in place and "add place" in place
+    assert help_text("occassion").startswith("occasion")
+    assert help_text("spaceship").startswith("Unknown type 'spaceship'")
+
+
+@pytest.mark.asyncio
+async def test_help_command_needs_no_draft_lookup() -> None:
+    from unittest.mock import MagicMock
+
+    from app.whatsapp.store import command_reply
+
+    conn = MagicMock()
+    reply = await command_reply(conn, "test", "/help place", MagicMock())
+    assert reply.startswith("place")
+    conn.cursor.assert_not_called()

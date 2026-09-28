@@ -472,7 +472,8 @@ SHIVAY_API_KEY=...
 | `/draft` | Show the current draft again |
 | `/save` | Validate and create the record; replies with its ID |
 | `/cancel` | Discard the draft; nothing is saved |
-| `/help` | List commands and record types |
+| `/help` | List all commands and record types |
+| `/help TYPE` | Required and optional fields plus an example for one type, e.g. `/help birthday`, `/help place` |
 
 Only `add` works without the `/`, and only when followed by a known type, so a
 normal message such as "add me to the group" is ignored. Common typos are

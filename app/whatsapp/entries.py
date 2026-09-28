@@ -191,6 +191,58 @@ def split_add(arguments: str) -> tuple[str, str]:
     return entity_name(word), supplied
 
 
+EXAMPLES = {
+    "occasion": "add birthday of Asha Rao, 16 October, +91 98765 43210, country IN, "
+    "timezone London",
+    "restaurant": "add restaurant The Olive Tree, Richmond, London, cuisine Mediterranean",
+    "service": "add service Sam, plumber, +447700900123, Richmond",
+    "place": "add place Kew Gardens, Richmond, category park",
+    "event": "add event Diwali Night on 2026-11-08 at Town Hall, 200 tickets, price 15, "
+    "category festival",
+    "product": "add product Blue Mug, price 8.50, stock 40, category kitchen",
+    "order": "add order ORD-1001 for +447700900123",
+    "order_item": "add order_item order ORD-1001, product 3, quantity 2, unit price 8.50",
+    "support_ticket": "add support_ticket TKT-2001, +447700900123, parcel arrived damaged",
+}
+
+HELP = (
+    "Commands (send from your own number):\n"
+    "add TYPE details - start a draft (the / is optional for add)\n"
+    "/set details - add missing fields or correct the draft\n"
+    "/draft - show the current draft\n"
+    "/save - create the record\n"
+    "/cancel - discard the draft\n"
+    "/help TYPE - fields and an example for one type\n\n"
+    "Types: " + ", ".join(ENTITIES) + " (birthday and anniversary mean occasion)."
+)
+
+
+def help_text(topic: str = "") -> str:
+    """General help, or required/optional fields and an example for one type."""
+    if not topic.strip():
+        return HELP
+    entity = split_add(topic)[0]
+    if entity not in ENTITIES:
+        return f"Unknown type '{topic.strip()}'.\n\n{HELP}"
+    # Inherited fields (timezone) come first in the model; list them last for reading.
+    fields = dict(
+        sorted(ENTITIES[entity][1].model_fields.items(), key=lambda f: f[0] == "timezone")
+    )
+    required = [name for name, field in fields.items() if field.is_required()]
+    optional = [name for name, field in fields.items() if not field.is_required()]
+    lines = [f"{entity}", "Required: " + ", ".join(required)]
+    if optional:
+        lines.append("Optional: " + ", ".join(optional))
+    lines += [
+        "Phone numbers need + and country code; dates are YYYY-MM-DD.",
+        "",
+        "Example:",
+        EXAMPLES[entity],
+        "/save",
+    ]
+    return "\n".join(lines)
+
+
 def validate_entry(entity: str, data: dict[str, Any]) -> BaseModel:
     model = ENTITIES[entity][1]
     extra = set(data) - set(model.model_fields)
