@@ -440,6 +440,17 @@ Groq failures leave the summary uncommitted for a later attempt. Availability an
 rate limits still depend on your Groq account. Message content is sent to Groq for
 summarization; stored message bodies are not shortened.
 
+**Automatic clean-up.** As soon as a summary is queued, in the same transaction,
+the archived messages up to the end of its window are deleted from
+`whatsapp_messages`, so the table only ever holds about one day of messages. A
+partial summary (`WHATSAPP_SUMMARY_MAX_MESSAGES`) still deletes the whole window, and
+says so. Kept: owner commands still waiting for the worker, and the last 10 minutes
+(so duplicate webhook copies are still recognised). The same run deletes delivered
+outbox rows older than 7 days and saved/cancelled drafts older than 30 days. Failed
+or unknown sends, captured birthday wishes, business records and greeting occasions
+are never deleted. If the summary fails, nothing is deleted and it is retried.
+Without `WHATSAPP_SUMMARIES_ENABLED`, no clean-up runs and the archive keeps growing.
+
 ### Add records through your own WhatsApp messages
 
 Only messages **you send** from the connected WhatsApp account (`fromMe=true`) can
@@ -619,7 +630,8 @@ processes commands, schedules summaries, and sends the durable outbox.
 `whatsapp_entry_drafts`, `whatsapp_summary_runs`, and `whatsapp_outbox` track work.
 Outbox `sent` means provider acceptance. Failed, unknown or interrupted (`sending`)
 deliveries are not automatically retried, to avoid duplicate sends; inspect Shivay
-before manually reconciling them. Archive records remain until you remove them.
+before manually reconciling them. Archived messages are deleted after each daily
+summary (see "Automatic clean-up" above).
 
 Run offline tests with `python -m pytest -q`. The additional PostgreSQL workflow test
 runs only when `WHATSAPP_TEST_DATABASE_URL` is set; it creates and removes a uniquely

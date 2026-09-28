@@ -5,6 +5,7 @@ import logging
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
 from app.config import Settings
@@ -155,6 +156,8 @@ class WhatsAppWorker:
                 text += f"\nPartial summary: included the first {len(rows)} of {total} messages."
             if any(len(row["body"]) > 600 for row in rows):
                 text += "\nLong messages were shortened to 600 characters for summarization."
+            if rows:
+                text += "\nThese messages have now been deleted from the archive."
             await conn.execute(
                 "INSERT INTO whatsapp_summary_runs "
                 "(instance,local_date,window_start,window_end,message_count,included_count) "
@@ -168,6 +171,34 @@ class WhatsAppWorker:
                 f"summary:{end.date()}",
                 text,
             )
+            await self.prune(conn, end)
+
+    async def prune(self, conn: AsyncConnection, end: datetime) -> None:
+        """Delete archived data once summarized, so the database does not keep growing.
+
+        Runs in the summary's transaction: messages go only if the summary is queued.
+        """
+        # Everything up to the window end is summarized (or was never needed).
+        # Pending owner commands stay; the last 10 minutes stay so duplicate
+        # webhook copies still find their message and are not answered twice.
+        await conn.execute(
+            "DELETE FROM whatsapp_messages WHERE instance = %s "
+            "AND received_at < LEAST(%s, now() - interval '10 minutes') "
+            "AND command_status <> 'pending'",
+            (self.instance, end),
+        )
+        # Delivered replies and summaries, and finished drafts, are not needed later.
+        # Failed/unknown sends are kept for manual reconciliation.
+        await conn.execute(
+            "DELETE FROM whatsapp_outbox WHERE instance = %s AND status = 'sent' "
+            "AND sent_at < now() - interval '7 days'",
+            (self.instance,),
+        )
+        await conn.execute(
+            "DELETE FROM whatsapp_entry_drafts WHERE instance = %s "
+            "AND status IN ('saved', 'cancelled') AND updated_at < now() - interval '30 days'",
+            (self.instance,),
+        )
 
     async def send_outbox(self) -> None:
         async with get_pool().connection() as conn, conn.cursor(row_factory=dict_row) as cur:

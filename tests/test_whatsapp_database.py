@@ -159,6 +159,10 @@ async def exercise_database(url: str) -> None:
                 await asyncio.gather(worker.make_summary(now), worker.make_summary(now))
                 summarize.assert_awaited_once()
                 assert len(summarize.call_args.args[0]) == 1
+            # Summarized messages are deleted so the archive does not keep growing.
+            assert (
+                await (await admin.execute("SELECT count(*) FROM whatsapp_messages")).fetchone()
+            )[0] == 0
             rows = await (await admin.execute("SELECT recipient FROM whatsapp_outbox")).fetchall()
             assert len(rows) == 2 and all(row[0] == config.whatsapp_owner_number for row in rows)
             sender.send_text.return_value = "mock-provider-id"
