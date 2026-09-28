@@ -71,9 +71,16 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
             (instance,),
         )
         draft = await cur.fetchone()
+    if draft and command != "/add":
+        # Drafts saved before a cleanup rule existed are fixed when next used.
+        cleaned = clean_fields(draft["data"])
+        if cleaned != draft["data"]:
+            await conn.execute(
+                "UPDATE whatsapp_entry_drafts SET data = %s, updated_at = now() WHERE id = %s",
+                (Jsonb(cleaned), draft["id"]),
+            )
+            draft["data"] = cleaned
     if command == "/add":
-        if draft:
-            return "You already have a draft. Use /draft, /save or /cancel before /add."
         entity, supplied = split_add(arguments)
         if entity not in ENTITIES:
             return help_text(entity or " ")
@@ -81,11 +88,20 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
             data = await llm.extract(entity, supplied)
         except Exception:
             return "Could not extract the record. Repeat /add TYPE with JSON; nothing was saved."
+        replaced = ""
+        if draft:
+            # A new add replaces the unsaved draft instead of being refused.
+            await conn.execute(
+                "UPDATE whatsapp_entry_drafts SET status = 'cancelled', "
+                "updated_at = now() WHERE id = %s",
+                (draft["id"],),
+            )
+            replaced = f"(Your previous unsaved {draft['entity']} draft was discarded.)\n"
         await conn.execute(
             "INSERT INTO whatsapp_entry_drafts (instance,entity,data) VALUES (%s,%s,%s)",
             (instance, entity, Jsonb(data)),
         )
-        return review(entity, data)
+        return replaced + review(entity, data)
     if not draft:
         return "No active draft. Start with /add TYPE followed by the details."
     if command == "/cancel":

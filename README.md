@@ -481,8 +481,8 @@ works without it, so everyday words like "save" or "cancel" stay ordinary text.
 `add` must be followed by a known type, so a normal message such as "add me to
 the group" is ignored. Common typos are
 understood (`occassion`, `resturant`), and `add birthday …` / `add anniversary …`
-mean an occasion. One draft is open at a time: finish it with `/save` or `/cancel`
-before the next `add`. Drafts survive restarts.
+mean an occasion. One draft is open at a time; a new `add` replaces an unsaved
+draft (the reply says so). Drafts survive restarts.
 
 #### What each type requires
 
@@ -500,8 +500,11 @@ before the next `add`. Drafts survive restarts.
 
 Values are cleaned before checking: a city timezone such as `london` becomes
 `Europe/London`, `91 98765 43210` becomes `+919876543210`, and `gb` becomes `GB`.
-A phone number without a country code (e.g. `07700 900123`) is rejected, and you
-are asked to correct it. Missing fields are never guessed; the draft lists them.
+A missing occasion country is taken from the timezone (`Europe/London` → `GB`,
+`Asia/Kolkata` → `IN`); an explicit country is kept. Drafts are re-cleaned whenever
+they are used, so older drafts pick up these fixes. A phone number without a
+country code (e.g. `07700 900123`) is rejected, and you are asked to correct it.
+Other missing fields are never guessed; the draft lists them.
 
 #### Examples
 

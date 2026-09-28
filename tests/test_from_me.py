@@ -1,5 +1,6 @@
 """Outgoing message echoes must not reach the model or the message archive."""
 
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -220,3 +221,76 @@ async def test_failing_command_is_answered_and_does_not_block_queue() -> None:
     assert "internal error" in queue.call_args.args[4]
     done = conn.execute.call_args_list[-1].args
     assert "command_status = 'done'" in done[0] and done[1] == (5,)
+
+
+def test_country_is_taken_from_timezone_when_missing() -> None:
+    from app.whatsapp.entries import clean_fields
+
+    assert clean_fields({"timezone": "London"})["country"] == "GB"
+    assert clean_fields({"timezone": "Asia/Kolkata"})["country"] == "IN"
+    # An explicit country is kept, even if it differs from the timezone.
+    assert clean_fields({"timezone": "London", "country": "in"})["country"] == "IN"
+    assert "country" not in clean_fields({"timezone": "Mars"})
+
+
+def draft_conn(draft: dict | None) -> Any:
+    from unittest.mock import MagicMock
+
+    def context(value: object = None) -> MagicMock:
+        manager = MagicMock()
+        manager.__aenter__ = AsyncMock(return_value=value)
+        manager.__aexit__ = AsyncMock(return_value=False)
+        return manager
+
+    cur = MagicMock()
+    cur.execute = AsyncMock()
+    cur.fetchone = AsyncMock(return_value=draft)
+    saved = MagicMock()
+    saved.fetchone = AsyncMock(return_value=(42,))
+    conn = MagicMock()
+    conn.cursor.return_value = context(cur)
+    conn.transaction.return_value = context()
+    conn.execute = AsyncMock(return_value=saved)
+    return conn
+
+
+STALE = {
+    "id": 1,
+    "entity": "occasion",
+    "data": {
+        "day": 16,
+        "name": "Asha Rao",
+        "month": 10,
+        "occasion": "birthday",
+        "timezone": "London",
+        "phone_number": "91 9876543210",
+    },
+}
+
+
+async def test_stale_draft_is_fixed_and_saved() -> None:
+    from unittest.mock import MagicMock
+
+    from app.whatsapp.store import command_reply
+
+    conn = draft_conn({**STALE, "data": dict(STALE["data"])})
+    reply = await command_reply(conn, "test", "/save", MagicMock())
+    assert reply == "Saved occasion with ID 42."
+    fixed = conn.execute.call_args_list[0].args[1][0].obj
+    assert fixed["timezone"] == "Europe/London"
+    assert fixed["phone_number"] == "+919876543210"
+    assert fixed["country"] == "GB"
+
+
+async def test_new_add_replaces_unsaved_draft() -> None:
+    from unittest.mock import MagicMock
+
+    from app.whatsapp.store import command_reply
+
+    llm = MagicMock()
+    llm.extract = AsyncMock(return_value={"name": "Kew Gardens"})
+    conn = draft_conn({**STALE, "data": dict(STALE["data"])})
+    reply = await command_reply(conn, "test", "add place Kew Gardens", llm)
+    assert reply.startswith("(Your previous unsaved occasion draft was discarded.)")
+    statements = [call.args[0] for call in conn.execute.call_args_list]
+    assert "status = 'cancelled'" in statements[0] and "INSERT" in statements[1]

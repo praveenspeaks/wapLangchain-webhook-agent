@@ -4,6 +4,8 @@ import json
 import re
 from datetime import date
 from decimal import Decimal
+from functools import cache
+from importlib import resources
 from typing import Annotated, Any, Literal
 from zoneinfo import available_timezones
 
@@ -152,8 +154,23 @@ def clean_timezone(value: str) -> str:
     return matches[0] if len(matches) == 1 else value
 
 
+@cache
+def zone_countries() -> dict[str, str]:
+    """IANA zone -> ISO country code, from the bundled tzdata zone.tab."""
+    try:
+        table = resources.files("tzdata").joinpath("zoneinfo", "zone.tab").read_text("utf-8")
+    except (ModuleNotFoundError, OSError):
+        return {}
+    rows = (line.split("\t") for line in table.splitlines() if line and line[0] != "#")
+    return {row[2]: row[0] for row in rows if len(row) >= 3}
+
+
 def clean_fields(data: dict[str, Any]) -> dict[str, Any]:
-    """Normalize owner-typed values before validation; never invent missing ones."""
+    """Normalize owner-typed values before validation; never invent unrelated ones.
+
+    A missing country is taken from the recipient's timezone (Europe/London -> GB),
+    because that timezone already names exactly one country.
+    """
     data = dict(data)
     for field in ("phone_number", "customer_phone"):
         if isinstance(data.get(field), str):
@@ -162,6 +179,8 @@ def clean_fields(data: dict[str, Any]) -> dict[str, Any]:
         data["timezone"] = clean_timezone(data["timezone"])
     if isinstance(data.get("country"), str):
         data["country"] = data["country"].strip().upper()
+    if not data.get("country") and data.get("timezone") in zone_countries():
+        data["country"] = zone_countries()[data["timezone"]]
     return data
 
 
