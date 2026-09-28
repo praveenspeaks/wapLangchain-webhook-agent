@@ -475,8 +475,11 @@ SHIVAY_API_KEY=...
 | `/help` | List all commands and record types |
 | `/help TYPE` | Required and optional fields plus an example for one type, e.g. `/help birthday`, `/help place` |
 
-Only `add` works without the `/`, and only when followed by a known type, so a
-normal message such as "add me to the group" is ignored. Common typos are
+In your "message yourself" chat, every command works without the `/` (`save`,
+`cancel`, `draft`, `help place`, `set country GB`). In any other chat only `add`
+works without it, so everyday words like "save" or "cancel" stay ordinary text.
+`add` must be followed by a known type, so a normal message such as "add me to
+the group" is ignored. Common typos are
 understood (`occassion`, `resturant`), and `add birthday …` / `add anniversary …`
 mean an occasion. One draft is open at a time: finish it with `/save` or `/cancel`
 before the next `add`. Drafts survive restarts.

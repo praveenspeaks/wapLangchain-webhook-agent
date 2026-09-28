@@ -165,16 +165,21 @@ def clean_fields(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def command_text(text: str) -> str | None:
+def command_text(text: str, self_chat: bool = False) -> str | None:
     """Canonical owner command, or None for ordinary messages.
 
     Accepts slash commands and plain "add TYPE details" (e.g. "Add occasion
-    birthday of ..."), but only when TYPE is a known record type.
+    birthday of ..."), but only when TYPE is a known record type. In the owner's
+    "message yourself" chat, "save", "cancel", "draft", "help" and "set ..." also
+    work without the slash; elsewhere those everyday words stay ordinary text.
     """
     text = text.strip()
     word, _, rest = text.partition(" ")
     if word.lower() in COMMANDS:
         return text
+    plain = word.lower().rstrip(".!")
+    if self_chat and "/" + plain in COMMANDS - {"/add"}:
+        return ("/" + plain + " " + rest.strip()).strip()
     entity = rest.strip().split(" ", 1)[0].strip(",.:;")
     if word.lower() == "add" and entity_name(entity) in ENTITIES:
         return "/add " + rest.strip()
@@ -207,12 +212,14 @@ EXAMPLES = {
 
 HELP = (
     "Commands (send from your own number):\n"
-    "add TYPE details - start a draft (the / is optional for add)\n"
+    "add TYPE details - start a draft\n"
     "/set details - add missing fields or correct the draft\n"
     "/draft - show the current draft\n"
     "/save - create the record\n"
     "/cancel - discard the draft\n"
-    "/help TYPE - fields and an example for one type\n\n"
+    "/help TYPE - fields and an example for one type\n"
+    "In your message-yourself chat the / is optional; in other chats only add works "
+    "without it.\n\n"
     "Types: " + ", ".join(ENTITIES) + " (birthday and anniversary mean occasion)."
 )
 

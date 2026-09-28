@@ -56,7 +56,48 @@ def test_only_owner_commands_are_queued(text: str, entry_enabled: bool, queued: 
 
     with patch("app.whatsapp.api.settings") as settings:
         settings.whatsapp_data_entry_enabled = entry_enabled
-        assert owner_command(owner_event(text)["data"]) is queued
+        settings.whatsapp_owner_number = "+447700900999"
+        assert (owner_command(owner_event(text)["data"]) is not None) is queued
+
+
+def self_chat_event(text: str, self_chat: bool) -> dict:
+    """Shape observed from the hub: a LID chat whose alternate JID is the account."""
+    return {
+        "key": {
+            "remoteJid": "82751940222977@lid",
+            "remoteJidAlt": ("918700000000" if self_chat else "447700900123") + "@s.whatsapp.net",
+            "fromMe": True,
+            "id": "own",
+        },
+        "message": {"conversation": text},
+        "owner": "918700000000@s.whatsapp.net",
+    }
+
+
+@pytest.mark.parametrize(
+    "text,self_chat,expected",
+    [
+        ("Save", True, "/save"),
+        ("save.", True, "/save"),
+        ("Cancel", True, "/cancel"),
+        ("draft", True, "/draft"),
+        ("help birthday", True, "/help birthday"),
+        ("set country GB", True, "/set country GB"),
+        ("Add occasion birthday of Sam", True, "/add occasion birthday of Sam"),
+        ("Save", False, None),
+        ("set the table please", False, None),
+        ("/save", False, "/save"),
+        ("Add occasion birthday of Sam", False, "/add occasion birthday of Sam"),
+        ("See you soon", True, None),
+    ],
+)
+def test_plain_commands_only_in_self_chat(text: str, self_chat: bool, expected: str | None) -> None:
+    from app.whatsapp.api import owner_command
+
+    with patch("app.whatsapp.api.settings") as settings:
+        settings.whatsapp_data_entry_enabled = True
+        settings.whatsapp_owner_number = "+447700900999"
+        assert owner_command(self_chat_event(text, self_chat)) == expected
 
 
 @pytest.mark.parametrize(

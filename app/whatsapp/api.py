@@ -8,11 +8,11 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.database import get_pool
+from app.whatsapp.entries import command_text
 from app.whatsapp.messages import (
     WebhookEvent,
     WebhookMessage,
     content,
-    is_command,
     is_from_me,
     message_kind,
     normalize,
@@ -21,11 +21,25 @@ from app.whatsapp.messages import (
 router = APIRouter(tags=["WhatsApp"])
 
 
-def owner_command(item: dict[str, Any]) -> bool:
+def is_self_chat(item: dict[str, Any]) -> bool:
+    """The owner's "message yourself" chat: the chat JID is the account's own number."""
+    key = item.get("key")
+    key = key if isinstance(key, dict) else {}
+    own = {item.get("owner")}
+    if settings.whatsapp_owner_number:
+        own.add(settings.whatsapp_owner_number.lstrip("+") + "@s.whatsapp.net")
+    own.discard(None)
+    return bool(own & {key.get("remoteJid"), key.get("remoteJidAlt")})
+
+
+def owner_command(item: dict[str, Any], text: str | None = None) -> str | None:
     """Outgoing messages are echoes, except owner data-entry commands for the worker."""
-    message = item.get("message")
-    text = content(message)[1] if isinstance(message, dict) else ""
-    return settings.whatsapp_data_entry_enabled and is_command(text)
+    if not settings.whatsapp_data_entry_enabled:
+        return None
+    if text is None:
+        message = item.get("message")
+        text = content(message)[1] if isinstance(message, dict) else ""
+    return command_text(text, is_self_chat(item))
 
 
 @router.post("/webhook/shivay")
@@ -38,7 +52,7 @@ async def shivay_webhook(
         item
         for item in items
         if message_kind({"messageType": payload.messageType, "data": item}) == "text"
-        and (not (payload.fromMe or is_from_me(item)) or owner_command(item))
+        and (not (payload.fromMe or is_from_me(item)) or owner_command(item) is not None)
     ]
     if not items:
         return {"status": "ignored", "stored": 0}
@@ -63,10 +77,11 @@ async def shivay_webhook(
             if row is None:
                 continue
             row["from_me"] = row["from_me"] or payload.fromMe or is_from_me(item)
-            if row["from_me"] and not (
-                settings.whatsapp_data_entry_enabled and is_command(row["body"])
-            ):
-                continue
+            if row["from_me"]:
+                command = owner_command(item, row["body"])
+                if command is None:
+                    continue
+                row["body"] = command  # The worker receives the canonical command.
             rows.append(row)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(422, "Invalid message payload or timestamp") from exc
