@@ -79,7 +79,7 @@ def test_invalid_payload_errors_do_not_expose_secrets_or_drop_batches() -> None:
     assert client.post("/webhook", content="not JSON").status_code == 422
 
 
-def test_enabled_archive_keeps_owner_commands_and_forwards_real_auth_header() -> None:
+def test_from_me_commands_are_ignored_before_archiving() -> None:
     body = hub_body()
     body["data"]["key"]["fromMe"] = True
     body["message"] = "/add restaurant Test"
@@ -95,8 +95,7 @@ def test_enabled_archive_keeps_owner_commands_and_forwards_real_auth_header() ->
             "/webhook", json=[{"body": body}], headers={"X-Webhook-Secret": "test-secret"}
         )
         assert result.json() == {"response": ""}
-        assert archive.call_args.args[1] == "test-secret"
-        assert archive.call_args.args[0].data["key"]["fromMe"] is True
+        archive.assert_not_awaited()
         process.assert_not_awaited()
 
 

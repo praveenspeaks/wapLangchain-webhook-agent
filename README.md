@@ -288,6 +288,15 @@ fixed UTC schedule without holiday-calendar checks.
 
 ### Connection Hub integration
 
+Outgoing echo policy: all events marked `fromMe=true` (at the top level, in `data`,
+or in `data.key`) are acknowledged and ignored before archiving or invoking the
+agent. `/invoke` and `/webhook` return `{"response":""}`; the hub must treat this
+as no reply to send. This also skips owner `/add`, `/set`, and `/save` messages
+marked `fromMe=true`, superseding the owner command ingestion instructions below.
+The underlying draft helpers remain available, but outgoing webhooks no longer
+enqueue commands even if `WHATSAPP_DATA_ENTRY_ENABLED=true`. Scheduled greetings
+and summaries still run normally; their outgoing echoes are ignored.
+
 Incoming webhook payload `apikey` values are ignored, never used to send messages,
 and never compared with the outbound `SHIVAY_API_KEY`. Receiving is open by default
 (`WHATSAPP_REQUIRE_WEBHOOK_SECRET=false`), so anyone who can reach the endpoint can

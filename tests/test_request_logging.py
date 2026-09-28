@@ -13,7 +13,7 @@ from app.application import create_app
     "case,status,outcome",
     [
         ("invalid", 422, "invalid_payload"),
-        ("ignored", 200, "outgoing_or_nontext_or_unsupported_event"),
+        ("ignored", 200, "ignored_from_me"),
         ("success", 200, "reply_returned"),
         ("wrong_path", 404, "route_not_found"),
         ("unauthorized", 401, "authentication_failed"),

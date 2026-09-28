@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.database import get_pool
-from app.whatsapp.messages import WebhookEvent, WebhookMessage, is_command, normalize
+from app.whatsapp.messages import WebhookEvent, WebhookMessage, is_from_me, message_kind, normalize
 
 router = APIRouter(tags=["WhatsApp"])
 
@@ -18,6 +18,22 @@ async def shivay_webhook(
     payload: WebhookEvent,
     secret: Annotated[str | None, Header(alias="X-Webhook-Secret")] = None,
 ) -> dict[str, int | str]:
+    items = payload.data if isinstance(payload.data, list) else [payload.data]
+    if payload.fromMe or (items and all(is_from_me(item) for item in items)):
+        return {"status": "ignored", "stored": 0}
+    items = [
+        item
+        for item in items
+        if message_kind(
+            {
+                "messageType": payload.messageType,
+                "data": item,
+            }
+        )
+        == "text"
+    ]
+    if not items:
+        return {"status": "ignored", "stored": 0}
     expected = settings.shivay_webhook_secret.get_secret_value()
     if not settings.whatsapp_enabled:
         raise HTTPException(503, "WhatsApp capture is disabled")
@@ -30,24 +46,22 @@ async def shivay_webhook(
         raise HTTPException(403, "Unexpected WhatsApp instance")
     if payload.event.upper().replace(".", "_") != "MESSAGES_UPSERT":
         return {"status": "ignored", "stored": 0}
-    items = payload.data if isinstance(payload.data, list) else [payload.data]
     if len(items) > 100:
         raise HTTPException(413, "Maximum 100 messages per webhook")
     try:
         rows = [
             normalize(WebhookMessage.model_validate(item), settings.whatsapp_owner_number)
             for item in items
+            if not is_from_me(item)
         ]
     except (ValidationError, ValueError) as exc:
         raise HTTPException(422, "Invalid message payload or timestamp") from exc
     stored = 0
+    rows = [row for row in rows if row is not None and not row["from_me"]]
+    if not rows:
+        return {"status": "ignored", "stored": 0}
     async with get_pool().connection() as conn, conn.transaction():
         for row in rows:
-            if row is None:
-                continue
-            pending = (
-                settings.whatsapp_data_entry_enabled and row["from_me"] and is_command(row["body"])
-            )
             cur = await conn.execute(
                 "INSERT INTO whatsapp_messages "
                 "(instance, message_id, chat_jid, is_group, sender_jid, sender_name, from_me, "
@@ -65,7 +79,7 @@ async def shivay_webhook(
                     row["message_type"],
                     row["body"],
                     row["message_at"],
-                    "pending" if pending else "ignored",
+                    "ignored",
                 ),
             )
             stored += int(await cur.fetchone() is not None)

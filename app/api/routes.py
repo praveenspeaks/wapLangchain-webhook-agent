@@ -13,7 +13,7 @@ from app.api.schemas import HealthResponse, InvokeResponse
 from app.config import settings
 from app.state import AppState
 from app.whatsapp.api import shivay_webhook
-from app.whatsapp.messages import WebhookEvent
+from app.whatsapp.messages import WebhookEvent, event_chat_type, is_from_me, message_kind
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,6 +28,13 @@ async def agent_webhook(request: Request) -> InvokeResponse:
     except ValueError as exc:
         raise HTTPException(422, "Expected valid JSON") from exc
     raw = unwrap_hub_request(raw)
+    if is_from_me(raw):
+        request.state.webhook_outcome = "ignored_from_me"
+        return InvokeResponse(response="")
+    kind = message_kind(raw)
+    if kind != "text":
+        request.state.webhook_outcome = f"ignored_{kind}"
+        return InvokeResponse(response="")
     payload, ignored = parse_hub_request(raw)
     if settings.whatsapp_enabled and raw.get("event") in ("messages.upsert", "MESSAGES_UPSERT"):
         try:
@@ -35,8 +42,7 @@ async def agent_webhook(request: Request) -> InvokeResponse:
         except ValidationError as exc:
             raise HTTPException(422, "Invalid WhatsApp event") from exc
         # Preserve the authenticated archive boundary, including instance checks.
-        # Outgoing commands are archived before returning an empty hub reply;
-        # the existing worker processes them and sends feedback privately.
+        # Outgoing events have already been ignored above, including owner commands.
         stored = await shivay_webhook(event, request.headers.get("X-Webhook-Secret"))
         if stored["stored"] == 0:
             request.state.webhook_outcome = "duplicate_or_unsupported_message"
@@ -45,7 +51,14 @@ async def agent_webhook(request: Request) -> InvokeResponse:
         request.state.webhook_outcome = "outgoing_or_nontext_or_unsupported_event"
         return InvokeResponse(response="")
     state: AppState = request.app.state.runtime
-    logger.info("Request received", extra={"sender_id": payload.sessionId})
+    logger.info(
+        "Request received",
+        extra={
+            "sender_id": payload.sessionId,
+            "chat_type": event_chat_type(raw),
+            "message_type": kind,
+        },
+    )
     try:
         response_text = await process_message(
             graph=state.graph,
