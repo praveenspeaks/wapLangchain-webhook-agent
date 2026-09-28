@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     log_level: str = Field("INFO")
     environment: str = Field("development")
     webhook_log_payloads: bool = False
+    # Create missing greeting/WhatsApp tables at startup (the migrations are additive).
+    auto_migrate: bool = True
 
     # Scheduled WhatsApp greetings; opt in after loading the occasions table.
     greetings_enabled: bool = False

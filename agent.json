@@ -54,6 +54,7 @@
                 "POSTGRES_URL",
                 "LOG_LEVEL",
                 "WEBHOOK_LOG_PAYLOADS",
+                "AUTO_MIGRATE",
                 "ENVIRONMENT",
                 "GROQ_MODEL",
                 "GREETINGS_ENABLED",

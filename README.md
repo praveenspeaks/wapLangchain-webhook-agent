@@ -187,8 +187,11 @@ The scheduler runs inside the API process and sends personalized text via Shivay
 It does not depend on Groq for greetings. Keep at least one application instance
 running; a hosting plan that sleeps cannot run the morning job while asleep.
 
-1. Apply the additive migration to the business database once. Unlike schema.sql,
-   it does not drop existing tables. Re-running it is safe for the same schema.
+1. Nothing to run: at every startup the app applies the additive migrations in
+   `migrations/` to the business database (`AUTO_MIGRATE=true`, the default). They
+   only create missing tables, columns and indexes, never drop anything, and an
+   advisory lock stops two instances migrating at once. To manage the schema
+   yourself instead, set `AUTO_MIGRATE=false` and run:
 
 ```sh
 uv run python -m app.greetings.migrate
@@ -384,8 +387,8 @@ ignored. This endpoint captures messages without automatically replying to other
 
 To enable:
 
-1. Run `python -m app.greetings.migrate` against the business database. This applies
-   all additive migrations, including `003_whatsapp_capture_and_entries.sql`.
+1. Deploy. Startup applies all additive migrations, including
+   `003_whatsapp_capture_and_entries.sql` (see `AUTO_MIGRATE` above).
    Existing products/orders/event/support tables must already exist. Do not run
    the destructive sample `schema.sql` against a database containing real data.
 2. Fill these settings in `.env` locally and in your deployment environment:
@@ -562,8 +565,8 @@ every birthday or anniversary wish **you send** is saved as a candidate: "Happy
 birthday", "HBD", "Many happy returns", "Happy anniversary", "Janamdin …",
 "जन्मदिन", including photo captions. Nothing is added to `greeting_occasions`
 until you add and save it. Wishes you receive, and your "message yourself" chat,
-are not captured. Apply the migrations first (`python -m app.greetings.migrate`
-creates `whatsapp_occasion_candidates`).
+are not captured. Its table, `whatsapp_occasion_candidates`, is created
+automatically at startup.
 
 | Where you wished | Who it is for |
 | --- | --- |

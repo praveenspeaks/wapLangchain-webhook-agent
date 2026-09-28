@@ -12,6 +12,7 @@ from psycopg_pool import AsyncConnectionPool
 from app.agent.graph import build_graph
 from app.config import settings
 from app.database import close_pool, get_pool, init_pool
+from app.greetings.migrate import apply_migrations
 from app.greetings.repository import GreetingRepository
 from app.greetings.scheduler import GreetingScheduler
 from app.greetings.shivay import ShivaySender
@@ -40,6 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await checkpointer.setup()
         app.state.runtime.graph = build_graph(checkpointer)
         await init_pool()
+        if settings.auto_migrate:
+            # Deployments cannot run scripts, so missing tables are created here.
+            async with get_pool().connection() as conn:
+                await apply_migrations(conn)
         outbound = settings.whatsapp_data_entry_enabled or settings.whatsapp_summaries_enabled
         if settings.greetings_enabled or outbound:
             sender = ShivaySender(settings)

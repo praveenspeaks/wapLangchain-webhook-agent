@@ -23,6 +23,8 @@ def test_resources_close_after_shutdown_or_partial_startup(startup_fails: bool) 
         patch("app.lifespan.build_graph", return_value=graph),
         patch("app.lifespan.init_pool", new=init),
         patch("app.lifespan.close_pool", new_callable=AsyncMock) as close,
+        patch("app.lifespan.get_pool"),
+        patch("app.lifespan.apply_migrations", new_callable=AsyncMock) as migrate,
     ):
         application = create_app()
         if startup_fails:
@@ -34,6 +36,8 @@ def test_resources_close_after_shutdown_or_partial_startup(startup_fails: bool) 
                 assert client.get("/health").json() == {"status": "healthy"}
         pool.open.assert_awaited_once_with(wait=True)
         saver.setup.assert_awaited_once()
+        # Tables are created at startup; deployments cannot run a migration script.
+        assert migrate.await_count == (0 if startup_fails else 1)
         close.assert_awaited_once()
         pool.close.assert_awaited_once()
         assert application.state.runtime.graph is None
@@ -80,6 +84,8 @@ async def test_enabled_scheduler_is_cancelled_before_resources_close() -> None:
         patch("app.lifespan.GreetingRepository", return_value=repository),
         patch("app.lifespan.ShivaySender", return_value=sender),
         patch("app.lifespan.GreetingScheduler", return_value=scheduler),
+        patch("app.lifespan.get_pool"),
+        patch("app.lifespan.apply_migrations", new_callable=AsyncMock),
     ):
         settings.greetings_enabled = True
         settings.whatsapp_enabled = False
