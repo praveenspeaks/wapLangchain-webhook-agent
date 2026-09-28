@@ -449,7 +449,12 @@ says so. Kept: owner commands still waiting for the worker, and the last 10 minu
 outbox rows older than 7 days and saved/cancelled drafts older than 30 days. Failed
 or unknown sends, captured birthday wishes, business records and greeting occasions
 are never deleted. If the summary fails, nothing is deleted and it is retried.
-Without `WHATSAPP_SUMMARIES_ENABLED`, no clean-up runs and the archive keeps growing.
+
+**Retention, with or without summaries.** Whenever `WHATSAPP_ENABLED=true`, an
+hourly clean-up deletes archived messages older than `WHATSAPP_ARCHIVE_RETENTION_DAYS`
+(default `2`), with the same rules and exceptions as above. Set `0` to keep messages
+forever. With summaries enabled the value must be `0` or at least `2`, so a summary
+that is retried the next day still finds its messages.
 
 ### Add records through your own WhatsApp messages
 

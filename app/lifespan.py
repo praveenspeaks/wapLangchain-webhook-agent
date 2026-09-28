@@ -16,7 +16,7 @@ from app.greetings.repository import GreetingRepository
 from app.greetings.scheduler import GreetingScheduler
 from app.greetings.shivay import ShivaySender
 from app.whatsapp.llm import WhatsAppLLM
-from app.whatsapp.worker import WhatsAppWorker
+from app.whatsapp.worker import WhatsAppWorker, run_retention
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 if settings.whatsapp_birthday_capture_enabled:
                     # Fail startup clearly if migration 004 has not been applied.
                     await conn.execute("SELECT id FROM whatsapp_occasion_candidates LIMIT 0")
+            if settings.whatsapp_archive_retention_days:
+                whatsapp_tasks.append(
+                    asyncio.create_task(run_retention(settings), name="whatsapp-retention")
+                )
             if outbound:
                 assert sender is not None
                 worker = WhatsAppWorker(settings, sender, WhatsAppLLM(settings))

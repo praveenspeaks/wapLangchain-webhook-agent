@@ -27,6 +27,48 @@ def summary_window(now: datetime, timezone: str, cutoff: str) -> tuple[datetime,
     return start, end
 
 
+async def prune(conn: AsyncConnection, instance: str, before: datetime) -> None:
+    """Delete archived messages received before `before`, plus finished work.
+
+    Pending owner commands stay; the last 10 minutes always stay so duplicate
+    webhook copies still find their message and are not answered twice.
+    """
+    await conn.execute(
+        "DELETE FROM whatsapp_messages WHERE instance = %s "
+        "AND received_at < LEAST(%s, now() - interval '10 minutes') "
+        "AND command_status <> 'pending'",
+        (instance, before),
+    )
+    # Delivered replies and summaries, and finished drafts, are not needed later.
+    # Failed/unknown sends are kept for manual reconciliation.
+    await conn.execute(
+        "DELETE FROM whatsapp_outbox WHERE instance = %s AND status = 'sent' "
+        "AND sent_at < now() - interval '7 days'",
+        (instance,),
+    )
+    await conn.execute(
+        "DELETE FROM whatsapp_entry_drafts WHERE instance = %s "
+        "AND status IN ('saved', 'cancelled') AND updated_at < now() - interval '30 days'",
+        (instance,),
+    )
+
+
+async def run_retention(config: Settings, interval: float = 3600) -> None:
+    """Hourly clean-up that works whether or not daily summaries are enabled."""
+    while True:
+        try:
+            before = datetime.now(UTC) - timedelta(days=config.whatsapp_archive_retention_days)
+            async with get_pool().connection() as conn, conn.transaction():
+                await prune(conn, config.shivay_instance_name, before)
+        except Exception as exc:
+            logger.error(
+                "WhatsApp retention clean-up failed",
+                extra={"error_type": type(exc).__name__},
+                exc_info=True,
+            )
+        await asyncio.sleep(interval)
+
+
 class WhatsAppWorker:
     def __init__(self, config: Settings, sender: ShivaySender, llm: WhatsAppLLM) -> None:
         self.config, self.sender, self.llm = config, sender, llm
@@ -177,28 +219,9 @@ class WhatsAppWorker:
         """Delete archived data once summarized, so the database does not keep growing.
 
         Runs in the summary's transaction: messages go only if the summary is queued.
+        Everything up to the window end is summarized (or was never needed).
         """
-        # Everything up to the window end is summarized (or was never needed).
-        # Pending owner commands stay; the last 10 minutes stay so duplicate
-        # webhook copies still find their message and are not answered twice.
-        await conn.execute(
-            "DELETE FROM whatsapp_messages WHERE instance = %s "
-            "AND received_at < LEAST(%s, now() - interval '10 minutes') "
-            "AND command_status <> 'pending'",
-            (self.instance, end),
-        )
-        # Delivered replies and summaries, and finished drafts, are not needed later.
-        # Failed/unknown sends are kept for manual reconciliation.
-        await conn.execute(
-            "DELETE FROM whatsapp_outbox WHERE instance = %s AND status = 'sent' "
-            "AND sent_at < now() - interval '7 days'",
-            (self.instance,),
-        )
-        await conn.execute(
-            "DELETE FROM whatsapp_entry_drafts WHERE instance = %s "
-            "AND status IN ('saved', 'cancelled') AND updated_at < now() - interval '30 days'",
-            (self.instance,),
-        )
+        await prune(conn, self.instance, end)
 
     async def send_outbox(self) -> None:
         async with get_pool().connection() as conn, conn.cursor(row_factory=dict_row) as cur:

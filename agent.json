@@ -70,6 +70,7 @@
                 "WHATSAPP_OWNER_NUMBER",
                 "WHATSAPP_SUMMARIES_ENABLED",
                 "WHATSAPP_SUMMARY_MAX_MESSAGES",
+                "WHATSAPP_ARCHIVE_RETENTION_DAYS",
                 "WHATSAPP_SUMMARY_TIME",
                 "WHATSAPP_SUMMARY_TIMEZONE"
             ]

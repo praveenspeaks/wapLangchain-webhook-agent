@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     whatsapp_summary_time: str = "21:00"
     whatsapp_summary_timezone: str = "Europe/London"
     whatsapp_summary_max_messages: int = Field(default=0, ge=0)
+    # Archived messages older than this are deleted hourly; 0 keeps them forever.
+    whatsapp_archive_retention_days: int = Field(default=2, ge=0)
 
     @field_validator("whatsapp_summary_timezone")
     @classmethod
@@ -79,6 +81,9 @@ class Settings(BaseSettings):
         outbound = self.whatsapp_data_entry_enabled or self.whatsapp_summaries_enabled
         if outbound and not self.whatsapp_enabled:
             raise ValueError("Enable WHATSAPP_ENABLED for data entry or summaries")
+        if self.whatsapp_summaries_enabled and self.whatsapp_archive_retention_days == 1:
+            # A summary covers the previous 24 hours; keep a day's margin for retries.
+            raise ValueError("WHATSAPP_ARCHIVE_RETENTION_DAYS must be 0 or at least 2")
         if self.whatsapp_birthday_capture_enabled and not self.whatsapp_data_entry_enabled:
             # Candidates are only reviewed and added through owner commands.
             raise ValueError("WHATSAPP_BIRTHDAY_CAPTURE_ENABLED needs WHATSAPP_DATA_ENTRY_ENABLED")
