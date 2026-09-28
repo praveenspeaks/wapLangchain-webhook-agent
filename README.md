@@ -288,6 +288,16 @@ fixed UTC schedule without holiday-calendar checks.
 
 ### Connection Hub integration
 
+For temporary payload diagnostics, set `WEBHOOK_LOG_PAYLOADS=true` and
+`LOG_LEVEL=INFO` in the deployment and restart. `Webhook payload diagnostic` logs
+include JSON bodies (including rejected requests), with credential fields, nested
+headers/query objects and URLs redacted. Message text and phone numbers remain visible.
+The fields `payload_apikey_present`, `payload_apikey_matches`,
+`webhook_secret_header_present` and `webhook_secret_header_matches` diagnose
+authentication without revealing secret values. The request ID links these entries
+to outcome logs. Invalid JSON and bodies over 64 KiB are omitted from payload logs.
+Return `WEBHOOK_LOG_PAYLOADS=false` after debugging. Logging is disabled by default.
+
 Webhook diagnostics: `/version` reports `webhook_logging: v1` when arrival logging
 is deployed. At `LOG_LEVEL=INFO`, every webhook request logs `Webhook request arrived`
 and `Webhook request finished`, including status, outcome and a generated request ID.

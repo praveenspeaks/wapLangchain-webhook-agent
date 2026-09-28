@@ -7,6 +7,9 @@ from uuid import uuid4
 
 from fastapi import Request, Response
 
+from app.api.payload_logging import payload_diagnostics
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 ENDPOINTS = {"/invoke", "/webhook", "/webhook/shivay"}
 
@@ -27,6 +30,14 @@ async def log_webhook_request(
     started = time.monotonic()
     logger.info("Webhook request arrived", extra=context)
     try:
+        if settings.webhook_log_payloads and request.url.path in ENDPOINTS:
+            logger.info(
+                "Webhook payload diagnostic",
+                extra={
+                    **context,
+                    **await payload_diagnostics(request),
+                },
+            )
         response = await call_next(request)
     except Exception as exc:
         logger.error(

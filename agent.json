@@ -53,6 +53,7 @@
                 "GROQ_API_KEY",
                 "POSTGRES_URL",
                 "LOG_LEVEL",
+                "WEBHOOK_LOG_PAYLOADS",
                 "ENVIRONMENT",
                 "GROQ_MODEL",
                 "GREETINGS_ENABLED",

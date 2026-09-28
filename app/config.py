@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Application
     log_level: str = Field("INFO")
     environment: str = Field("development")
+    webhook_log_payloads: bool = False
 
     # Scheduled WhatsApp greetings; opt in after loading the occasions table.
     greetings_enabled: bool = False
