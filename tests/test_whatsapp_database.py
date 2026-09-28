@@ -20,7 +20,7 @@ from psycopg_pool import AsyncConnectionPool
 from test_whatsapp import configuration, payload
 
 from app.tools.greetings import add_greeting_occasion
-from app.whatsapp.api import shivay_webhook
+from app.whatsapp.api import claim_reply, shivay_webhook
 from app.whatsapp.llm import WhatsAppLLM
 from app.whatsapp.messages import WebhookEvent
 from app.whatsapp.store import command_reply, save_record
@@ -83,6 +83,9 @@ async def exercise_database(url: str) -> None:
             event = WebhookEvent.model_validate(payload())
             assert (await shivay_webhook(event, "test-secret"))["stored"] == 1
             assert (await shivay_webhook(event, "test-secret"))["stored"] == 0
+            # Native event and agent request copies share one reply.
+            assert await claim_reply(event)
+            assert not await claim_reply(event)
             await worker.process_command()
             assert (
                 await (await admin.execute("SELECT count(*) FROM whatsapp_entry_drafts")).fetchone()
@@ -144,8 +147,8 @@ async def exercise_database(url: str) -> None:
             await asyncio.gather(worker.process_command(), worker.process_command())
             assert (await (await admin.execute("SELECT count(*) FROM whatsapp_outbox")).fetchone())[
                 0
-            ] == 0
-            assert "No active draft" in await command("/draft")
+            ] == 1
+            assert "cancelled" in await command("/cancel")
             await admin.execute(
                 "UPDATE whatsapp_messages SET received_at = '2026-09-26 12:00:00+00'"
             )
@@ -157,12 +160,12 @@ async def exercise_database(url: str) -> None:
                 summarize.assert_awaited_once()
                 assert len(summarize.call_args.args[0]) == 1
             rows = await (await admin.execute("SELECT recipient FROM whatsapp_outbox")).fetchall()
-            assert len(rows) == 1 and all(row[0] == config.whatsapp_owner_number for row in rows)
+            assert len(rows) == 2 and all(row[0] == config.whatsapp_owner_number for row in rows)
             sender.send_text.return_value = "mock-provider-id"
             await asyncio.gather(worker.send_outbox(), worker.send_outbox())
-            assert sender.send_text.await_count == 1
+            assert sender.send_text.await_count == 2
             await worker.send_outbox()
-            assert sender.send_text.await_count == 1
+            assert sender.send_text.await_count == 2
     finally:
         if pool is not None:
             await pool.close()

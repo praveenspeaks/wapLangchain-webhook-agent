@@ -288,14 +288,20 @@ fixed UTC schedule without holiday-calendar checks.
 
 ### Connection Hub integration
 
-Outgoing echo policy: all events marked `fromMe=true` (at the top level, in `data`,
-or in `data.key`) are acknowledged and ignored before archiving or invoking the
-agent. `/invoke` and `/webhook` return `{"response":""}`; the hub must treat this
-as no reply to send. This also skips owner `/add`, `/set`, and `/save` messages
-marked `fromMe=true`, superseding the owner command ingestion instructions below.
-The underlying draft helpers remain available, but outgoing webhooks no longer
-enqueue commands even if `WHATSAPP_DATA_ENTRY_ENABLED=true`. Scheduled greetings
-and summaries still run normally; their outgoing echoes are ignored.
+Outgoing message policy: events marked `fromMe=true` (at the top level, in `data`,
+or in `data.key`) never reach the chat agent, and `/invoke` and `/webhook` return
+`{"response":""}`, which the hub must treat as no reply to send. The only outgoing
+messages that are processed are owner data-entry commands (`/add`, `/set`, `/save`,
+`/draft`, `/cancel`, `/help`) when `WHATSAPP_ENABLED` and `WHATSAPP_DATA_ENTRY_ENABLED`
+are true: they are archived as pending, and the worker replies privately to
+`WHATSAPP_OWNER_NUMBER`. Other outgoing messages, including scheduled greetings,
+summaries and the worker's own `[Agent]` replies, are ignored and not archived.
+
+Single reply per message: a hub may deliver the same message twice, once as the
+native provider event and once as the agent request (which has a top-level
+`message`). Only the agent request is answered; native events are archived only,
+because their HTTP response is never delivered to WhatsApp. With the archive
+enabled, a reply is claimed atomically per message, so retries are not answered twice.
 
 Incoming webhook payload `apikey` values are ignored, never used to send messages,
 and never compared with the outbound `SHIVAY_API_KEY`. Receiving is open by default
@@ -351,7 +357,7 @@ features, not the `/webhook` chat endpoint.
 For archiving and scheduled summaries, enable/configure the features below. No incoming API key is required. Optional header protection applies only when explicitly enabled. The event instance must match `SHIVAY_INSTANCE_NAME`. Hub events are then archived before processing; duplicate
 events return an empty response. Outgoing owner `/add` commands are archived for
 the existing worker, which sends its replies privately, so the hub must not send
-an additional reply. Do not forward the same event to both webhook endpoints.
+an additional reply.
 
 Keep `SHIVAY_API_URL`, `SHIVAY_API_KEY`, and `SHIVAY_INSTANCE_NAME` for proactive
 greetings, daily summaries, and private command feedback: these sends happen

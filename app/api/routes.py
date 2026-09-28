@@ -12,7 +12,7 @@ from app.api.hub import parse_hub_request, unwrap_hub_request
 from app.api.schemas import HealthResponse, InvokeResponse
 from app.config import settings
 from app.state import AppState
-from app.whatsapp.api import shivay_webhook
+from app.whatsapp.api import claim_reply, shivay_webhook
 from app.whatsapp.messages import WebhookEvent, event_chat_type, is_from_me, message_kind
 
 logger = logging.getLogger(__name__)
@@ -28,27 +28,44 @@ async def agent_webhook(request: Request) -> InvokeResponse:
     except ValueError as exc:
         raise HTTPException(422, "Expected valid JSON") from exc
     raw = unwrap_hub_request(raw)
-    if is_from_me(raw):
-        request.state.webhook_outcome = "ignored_from_me"
-        return InvokeResponse(response="")
     kind = message_kind(raw)
-    if kind != "text":
-        request.state.webhook_outcome = f"ignored_{kind}"
-        return InvokeResponse(response="")
-    payload, ignored = parse_hub_request(raw)
-    if settings.whatsapp_enabled and raw.get("event") in ("messages.upsert", "MESSAGES_UPSERT"):
+    from_me = is_from_me(raw)
+    event: WebhookEvent | None = None
+    if (
+        settings.whatsapp_enabled
+        and kind == "text"
+        and raw.get("event") in ("messages.upsert", "MESSAGES_UPSERT")
+    ):
         try:
             event = WebhookEvent.model_validate(raw)
         except ValidationError as exc:
             raise HTTPException(422, "Invalid WhatsApp event") from exc
         # Preserve the authenticated archive boundary, including instance checks.
-        # Outgoing events have already been ignored above, including owner commands.
+        # Owner commands are queued here; the worker sends their replies privately.
         stored = await shivay_webhook(event, request.headers.get("X-Webhook-Secret"))
-        if stored["stored"] == 0:
-            request.state.webhook_outcome = "duplicate_or_unsupported_message"
+        if from_me:
+            request.state.webhook_outcome = (
+                "owner_command_queued" if stored["stored"] else "ignored_from_me"
+            )
             return InvokeResponse(response="")
+    if from_me:
+        request.state.webhook_outcome = "ignored_from_me"
+        return InvokeResponse(response="")
+    if kind != "text":
+        request.state.webhook_outcome = f"ignored_{kind}"
+        return InvokeResponse(response="")
+    if raw.get("event") is not None and not isinstance(raw.get("message"), str):
+        # Native provider events are notifications whose HTTP response is never
+        # delivered to WhatsApp; only the hub's agent request (top-level `message`)
+        # carries the reply. Answering both would waste the one reply on the wrong copy.
+        request.state.webhook_outcome = "native_event_archived_no_reply"
+        return InvokeResponse(response="")
+    payload, ignored = parse_hub_request(raw)
     if ignored:
         request.state.webhook_outcome = "outgoing_or_nontext_or_unsupported_event"
+        return InvokeResponse(response="")
+    if event is not None and not await claim_reply(event):
+        request.state.webhook_outcome = "duplicate_or_unsupported_message"
         return InvokeResponse(response="")
     state: AppState = request.app.state.runtime
     logger.info(

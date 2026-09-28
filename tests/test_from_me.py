@@ -28,3 +28,32 @@ def test_outgoing_echo_no_processing(path: str, location: str) -> None:
         )
         process.assert_not_awaited()
         pool.assert_not_called()
+
+
+def owner_event(text: str) -> dict:
+    return {
+        "event": "messages.upsert",
+        "instance": "test",
+        "data": {
+            "key": {"remoteJid": "447700900123@s.whatsapp.net", "id": "own", "fromMe": True},
+            "message": {"conversation": text},
+            "messageTimestamp": 1790605245,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "text,entry_enabled,queued",
+    [
+        ("/add event Diwali party", True, True),
+        ("/save", True, True),
+        ("Hello, see you soon", True, False),
+        ("/add event Diwali party", False, False),
+    ],
+)
+def test_only_owner_commands_are_queued(text: str, entry_enabled: bool, queued: bool) -> None:
+    from app.whatsapp.api import owner_command
+
+    with patch("app.whatsapp.api.settings") as settings:
+        settings.whatsapp_data_entry_enabled = entry_enabled
+        assert owner_command(owner_event(text)["data"]) is queued
