@@ -59,7 +59,7 @@ class WhatsAppLLM:
             raise ValueError("Expected an object of field names and values")
         if set(result) - set(ENTITIES[entity][1].model_fields):
             raise ValueError("Unknown record fields")
-        return clean_fields(result)
+        return clean_fields(result, entity)
 
     async def summarize(self, records: list[dict[str, Any]]) -> str:
         return await self.complete(

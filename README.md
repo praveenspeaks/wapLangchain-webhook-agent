@@ -552,6 +552,22 @@ add event {"event_name":"Diwali Night","event_date":"2026-11-08","venue":"Town H
 
 JSON after the type skips the model entirely. Each `/add` then needs `/save`.
 
+**Several records in one message.** Put the type on the first line and one record
+per line below it (up to 25). Lines without digits, such as `birthday`, apply to
+every line. A location like `london` or `india`, or a single-timezone phone code
+(+44, +91, +971…), fills in timezone and country.
+
+```text
+add occasion birthday
+Ashish Aggarwal - 6 Feb, phone +44 7442 254603, london
+Manish Sahal - 15 Aug, phone +91 63983 96518, india
+```
+
+The reply lists every line as ✓ ready or ✗ with what is missing. `save` creates all
+✓ lines at once (one failure, such as a duplicate, does not stop the others) and
+reports anything not saved; `cancel` discards the list. A list cannot be edited
+with `set`: save the ready lines, then send the others again.
+
 Other rules: prices and stock cannot be negative, quantities must be positive, and
 event sales cannot exceed capacity. Create the order and product before an order
 item; adding an item recalculates the order total (no stock reservation or payment).

@@ -1,5 +1,6 @@
 """Transactional owner drafts, business inserts, and durable outgoing messages."""
 
+import asyncio
 import calendar
 import re
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from psycopg import AsyncConnection, DataError, IntegrityError, sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from pydantic import ValidationError
 
 from app.whatsapp.entries import (
     ENTITIES,
@@ -130,7 +132,108 @@ async def candidate_draft(
         data["phone_number"] = row["phone_number"]
         if located := region(row["phone_number"]):
             data["country"], data["timezone"] = located
-    return clean_fields(data)
+    return clean_fields(data, "occasion")
+
+
+BATCH = "batch:"  # Draft entity prefix for a list of records sent in one message.
+MAX_BATCH = 25
+
+
+def batch_lines(supplied: str) -> tuple[str, list[str]] | None:
+    """Split a pasted list into a shared header and one record per line.
+
+    Lines with digits (dates, phones, prices) are records; other lines, such as
+    "birthday", are context applied to every record. Needs at least two records.
+    """
+    lines = [line.strip().lstrip("-•*·").strip() for line in supplied.splitlines()]
+    lines = [line for line in lines if line]
+    records = [line for line in lines if any(char.isdigit() for char in line)]
+    if len(records) < 2:
+        return None
+    return " ".join(line for line in lines if line not in records), records
+
+
+async def extract_lines(
+    llm: WhatsAppLLM, entity: str, header: str, lines: list[str]
+) -> list[dict[str, Any]]:
+    limit = asyncio.Semaphore(4)  # Stay well inside the model's rate limit.
+
+    async def one(line: str) -> dict[str, Any]:
+        async with limit:
+            try:
+                return {"line": line, "data": await llm.extract(entity, f"{header} {line}".strip())}
+            except Exception:
+                return {"line": line, "data": None}
+
+    return list(await asyncio.gather(*(one(line) for line in lines)))
+
+
+def batch_item(entity: str, item: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+    """(valid values or None, one-line description or problem) for a list item."""
+    if item["data"] is None:
+        return None, "could not read this line"
+    data = clean_fields(item["data"], entity)
+    try:
+        values = validate_entry(entity, data).model_dump()
+    except ValidationError as exc:
+        missing = sorted({str(error["loc"][0]) for error in exc.errors() if error["loc"]})
+        return None, "missing or invalid: " + (", ".join(missing) or "record")
+    except ValueError as exc:
+        return None, str(exc)
+    if entity == "occasion":
+        month = calendar.month_abbr[values["month"]]
+        return values, (
+            f"{values['name']} · {values['occasion']} {values['day']} {month} · "
+            f"{values['phone_number']} · {values['country']}, {values['timezone']}"
+        )
+    shown = [str(value) for value in values.values() if value not in (None, "", [])]
+    return values, ", ".join(shown)[:150]
+
+
+def batch_review(entity: str, items: list[dict[str, Any]]) -> str:
+    lines, ready = [], 0
+    for number, item in enumerate(items, 1):
+        values, text = batch_item(entity, item)
+        ready += values is not None
+        lines.append(f"{'✓' if values else '✗'} {number}. {text if values else item['line']}")
+        if values is None:
+            lines.append(f"   ({text})")
+    footer = f"\n\n{ready} of {len(items)} ready. Send save to create them, or cancel."
+    if ready < len(items):
+        footer += " Lines marked ✗ are skipped; send them again with add after fixing them."
+    return f"Review {len(items)} {entity} records:\n" + "\n".join(lines) + footer
+
+
+async def batch_command(conn: AsyncConnection, draft: dict[str, Any], command: str) -> str:
+    entity, items = draft["entity"][len(BATCH) :], draft["data"]["items"]
+    if command == "/set":
+        return (
+            "A list can't be corrected with set. Send save to create the ✓ records, then "
+            "add the others again, or cancel and resend the whole list."
+        )
+    if command != "/save":
+        return batch_review(entity, items)
+    saved, failed = [], []
+    for number, item in enumerate(items, 1):
+        values, text = batch_item(entity, item)
+        if values is None:
+            failed.append(f"{number}. {item['line']} ({text})")
+            continue
+        try:
+            async with conn.transaction():  # One bad record does not undo the others.
+                saved.append(await save_record(conn, entity, values))
+        except (ValueError, IntegrityError, DataError):
+            failed.append(f"{number}. {item['line']} (already exists or violates a rule)")
+    await conn.execute(
+        "UPDATE whatsapp_entry_drafts SET status = 'saved', saved_record_id = %s, "
+        "updated_at = now() WHERE id = %s",
+        (",".join(saved)[:1000] or None, draft["id"]),
+    )
+    reply = f"Saved {len(saved)} of {len(items)} {entity} records"
+    reply += f" (IDs {', '.join(saved)})." if saved else "."
+    if failed:
+        reply += "\nNot saved:\n" + "\n".join(failed)
+    return reply
 
 
 async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: WhatsAppLLM) -> str:
@@ -151,7 +254,7 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
         draft = await cur.fetchone()
     if draft and command != "/add":
         # Drafts saved before a cleanup rule existed are fixed when next used.
-        cleaned = clean_fields(draft["data"])
+        cleaned = clean_fields(draft["data"], draft["entity"])
         if cleaned != draft["data"]:
             await conn.execute(
                 "UPDATE whatsapp_entry_drafts SET data = %s, updated_at = now() WHERE id = %s",
@@ -163,10 +266,17 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
         if entity not in ENTITIES:
             return help_text(entity or " ")
         reference = CANDIDATE_REF.fullmatch(supplied.strip())
+        batch = batch_lines(supplied)
         if entity == "occasion" and reference:
             data = await candidate_draft(conn, instance, int(reference.group(1)))
             if data is None:
                 return f"No captured wish #{reference.group(1)}. Send /birthdays to list them."
+        elif batch is not None:
+            header, lines = batch
+            if len(lines) > MAX_BATCH:
+                return f"Send at most {MAX_BATCH} lines at a time; nothing was saved."
+            data = {"items": await extract_lines(llm, entity, header, lines)}
+            entity = BATCH + entity
         else:
             try:
                 data = await llm.extract(entity, supplied)
@@ -187,6 +297,8 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
             "INSERT INTO whatsapp_entry_drafts (instance,entity,data) VALUES (%s,%s,%s)",
             (instance, entity, Jsonb(data)),
         )
+        if entity.startswith(BATCH):
+            return replaced + batch_review(entity[len(BATCH) :], data["items"])
         return replaced + review(entity, data)
     if not draft:
         return "No active draft. Start with /add TYPE followed by the details."
@@ -197,9 +309,13 @@ async def command_reply(conn: AsyncConnection, instance: str, text: str, llm: Wh
             (draft["id"],),
         )
         return "Draft cancelled. No business record was created."
+    if draft["entity"].startswith(BATCH):
+        return await batch_command(conn, draft, command)
     if command == "/set":
         try:
-            data = clean_fields(draft["data"] | await llm.extract(draft["entity"], arguments))
+            data = clean_fields(
+                draft["data"] | await llm.extract(draft["entity"], arguments), draft["entity"]
+            )
         except Exception:
             return "Could not read the correction. Use /set {JSON fields}. The draft is unchanged."
         await conn.execute(

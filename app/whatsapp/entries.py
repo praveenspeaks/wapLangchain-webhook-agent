@@ -12,6 +12,7 @@ from zoneinfo import available_timezones
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.greetings.schemas import OccasionInput
+from app.whatsapp.wishes import region
 
 Name = Annotated[str, Field(min_length=1, max_length=200)]
 Category = Annotated[str, Field(min_length=1, max_length=100)]
@@ -144,14 +145,40 @@ def clean_phone(value: str) -> str:
     return digits
 
 
+COUNTRY_ALIASES = {
+    "uk": "GB", "u.k.": "GB", "england": "GB", "scotland": "GB", "wales": "GB",
+    "britain": "GB", "great britain": "GB", "united kingdom": "GB", "uae": "AE",
+    "dubai": "AE", "usa": "US", "us": "US", "america": "US",
+}  # fmt: skip
+
+
 def clean_timezone(value: str) -> str:
-    """'london' or 'new york' -> the unique IANA zone with that city, else unchanged."""
+    """'london', 'new york' or a one-timezone country ('india', 'uk') -> IANA zone.
+
+    Anything ambiguous (e.g. 'usa', 'australia') is left unchanged, so it is asked.
+    """
     city = value.strip().replace(" ", "_").lower()
     zones = {zone.lower(): zone for zone in available_timezones()}
     if city in zones:
         return zones[city]
     matches = [zone for key, zone in zones.items() if key.endswith("/" + city)]
-    return matches[0] if len(matches) == 1 else value
+    if len(matches) == 1:
+        return matches[0]
+    name = value.strip().lower()
+    code = COUNTRY_ALIASES.get(name) or country_names().get(name)
+    in_country = [zone for zone, country in zone_countries().items() if country == code]
+    return in_country[0] if len(in_country) == 1 else value
+
+
+@cache
+def country_names() -> dict[str, str]:
+    """Lower-case country name -> ISO code, from the bundled tzdata iso3166.tab."""
+    try:
+        table = resources.files("tzdata").joinpath("zoneinfo", "iso3166.tab").read_text("utf-8")
+    except (ModuleNotFoundError, OSError):
+        return {}
+    rows = (line.split("\t") for line in table.splitlines() if line and line[0] != "#")
+    return {row[1].strip().lower(): row[0] for row in rows if len(row) >= 2}
 
 
 @cache
@@ -165,13 +192,17 @@ def zone_countries() -> dict[str, str]:
     return {row[2]: row[0] for row in rows if len(row) >= 3}
 
 
-def clean_fields(data: dict[str, Any]) -> dict[str, Any]:
+def clean_fields(data: dict[str, Any], entity: str | None = None) -> dict[str, Any]:
     """Normalize owner-typed values before validation; never invent unrelated ones.
 
-    A missing country is taken from the recipient's timezone (Europe/London -> GB),
-    because that timezone already names exactly one country.
+    For occasions, a missing timezone comes from a single-timezone phone number
+    (+91 -> Asia/Kolkata), and a missing country from the timezone
+    (Europe/London -> GB), because each already names exactly one country.
     """
     data = dict(data)
+    phone = clean_phone(str(data.get("phone_number") or ""))
+    if entity == "occasion" and not data.get("timezone") and (located := region(phone)):
+        data["timezone"] = located[1]
     for field in ("phone_number", "customer_phone"):
         if isinstance(data.get(field), str):
             data[field] = clean_phone(data[field])
@@ -232,6 +263,7 @@ EXAMPLES = {
 HELP = (
     "Commands (send from your own number):\n"
     "add TYPE details - start a draft\n"
+    "add TYPE, then one record per line - several records in one message\n"
     "/set details - add missing fields or correct the draft\n"
     "/draft - show the current draft\n"
     "/save - create the record\n"
