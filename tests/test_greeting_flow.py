@@ -42,4 +42,5 @@ def test_deployment_marker() -> None:
     assert TestClient(create_app()).get("/version").json() == {
         "service": "wapLangchain",
         "greeting_workflow": "schema-v2",
+        "webhook_logging": "v1",
     }

@@ -288,6 +288,15 @@ fixed UTC schedule without holiday-calendar checks.
 
 ### Connection Hub integration
 
+Webhook diagnostics: `/version` reports `webhook_logging: v1` when arrival logging
+is deployed. At `LOG_LEVEL=INFO`, every webhook request logs `Webhook request arrived`
+and `Webhook request finished`, including status, outcome and a generated request ID.
+These logs omit bodies, credentials and phone numbers. `401` means webhook authentication
+failed, `403` can indicate an unexpected instance, and `422` means invalid input.
+An ignored outgoing/non-text event returns an empty reply. A `reply_returned` outcome
+means the hub received reply text, not that WhatsApp delivered it. POSTs to unknown
+paths are logged as `unrecognized`. The response includes `X-Agent-Request-ID`.
+
 Set the agent webhook URL in Connection Hub to `https://YOUR_AGENT_HOST/webhook`
 (`/invoke` also works). Both accept the direct Connection Hub body, an n8n
 `{"body": {...}}` wrapper, or a one-item array containing that wrapper. Send one

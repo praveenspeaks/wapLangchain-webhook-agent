@@ -39,8 +39,10 @@ async def agent_webhook(request: Request) -> InvokeResponse:
         # the existing worker processes them and sends feedback privately.
         stored = await shivay_webhook(event, request.headers.get("X-Webhook-Secret"))
         if stored["stored"] == 0:
+            request.state.webhook_outcome = "duplicate_or_unsupported_message"
             return InvokeResponse(response="")
     if ignored:
+        request.state.webhook_outcome = "outgoing_or_nontext_or_unsupported_event"
         return InvokeResponse(response="")
     state: AppState = request.app.state.runtime
     logger.info("Request received", extra={"sender_id": payload.sessionId})
@@ -51,8 +53,10 @@ async def agent_webhook(request: Request) -> InvokeResponse:
             text=payload.message,
         )
         state.messages_processed += 1
+        request.state.webhook_outcome = "reply_returned" if response_text else "empty_reply"
         return InvokeResponse(response=response_text)
     except Exception:
+        request.state.webhook_outcome = "processing_failed"
         state.messages_failed += 1
         logger.exception("Error processing request", extra={"sender_id": payload.sessionId})
         return InvokeResponse(
@@ -69,7 +73,11 @@ async def health() -> HealthResponse:
 @router.get("/version")
 async def version() -> dict[str, str]:
     """Identify deployments containing deterministic greeting validation replies."""
-    return {"service": "wapLangchain", "greeting_workflow": "schema-v2"}
+    return {
+        "service": "wapLangchain",
+        "greeting_workflow": "schema-v2",
+        "webhook_logging": "v1",
+    }
 
 
 @router.get("/metrics")
